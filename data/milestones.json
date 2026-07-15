@@ -1,0 +1,120 @@
+{
+    "CountdownMilestones": [
+        {
+            "name": "Go for Prop Load",
+            "time": -3000
+        },
+        {
+            "name": "Booster LOX Load",
+            "time": -2193
+        },
+        {
+            "name": "Booster CH4 Load",
+            "time": -2100
+        },
+        {
+            "name": "Ship CH4 Load",
+            "time": -2054
+        },
+        {
+            "name": "Ship LOX Load",
+            "time": -2053
+        },
+        {
+            "name": "Engine Chill",
+            "time": -1300
+        },
+        {
+            "name": "Booster Load Complete",
+            "time": -170
+        },
+        {
+            "name": "Ship Load Complete",
+            "time": -130
+        },
+        {
+            "name": "T-40 Seconds Hold",
+            "time": -40
+        },
+        {
+            "name": "FD Go for Launch",
+            "time": -30
+        },
+        {
+            "name": "Deluge Start",
+            "time": -17
+        },
+        {
+            "name": "Liftoff",
+            "time": 0
+        },
+        {
+            "name": "Max Q",
+            "time": 58
+        },
+        {
+            "name": "MECO",
+            "time": 138
+        },
+        {
+            "name": "Hot Staging",
+            "time": 141
+        },
+        {
+            "name": "Boost Back Start",
+            "time": 145
+        },
+        {
+            "name": "Boost Back Ends",
+            "time": 183
+        },
+        {
+            "name": "Booster Landing Burn Start",
+            "time": 387
+        },
+        {
+            "name": "Booster Landing Burn Ends",
+            "time": 413
+        },
+        {
+            "name": "SECO",
+            "time": 485
+        },
+        {
+            "name": "Deploy Start",
+            "time": 1000
+        },
+        {
+            "name": "Deploy Complete",
+            "time": 1659
+        },
+        {
+            "name": "In Space Relight",
+            "time": 2338
+        },
+        {
+            "name": "Ship Entry Interface",
+            "time": 2850
+        },
+        {
+            "name": "Ship Transonic",
+            "time": 3743
+        },
+        {
+            "name": "Ship Subsonic",
+            "time": 3781
+        },
+        {
+            "name": "Ship Landing Burn Start",
+            "time": 3901
+        },
+        {
+            "name": "Ship Landing Flip",
+            "time": 3903
+        },
+        {
+            "name": "Ship Landing Burn Ends",
+            "time": 3921
+        }
+    ]
+}
