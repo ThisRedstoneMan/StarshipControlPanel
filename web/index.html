@@ -162,6 +162,10 @@
       Sends a fake T-0 shift through the real detection pipeline (server-side),
       so the banner and history reflect an actual test event, tagged [TEST].
     </p>
+    <label style="display: block; margin-top: 10px;">
+      <input type="checkbox" id="dbgGradualHold" />
+      Simulate a continuous hold (T-0 slips 1 second per second)
+    </label>
     <div class="dbg-row">
       <button id="dbgHoldShort">+30s hold</button>
       <button id="dbgHoldLong">+5min hold</button>
@@ -224,9 +228,24 @@
     document.getElementById("dbgHoldShort").addEventListener("click", () => simulateShift(30));
     document.getElementById("dbgHoldLong").addEventListener("click", () => simulateShift(300));
     document.getElementById("dbgDelay").addEventListener("click", () => simulateShift(7200));
+    document.getElementById("dbgGradualHold").addEventListener("change", async (event) => {
+      try {
+        const enabled = event.target.checked;
+        const response = await fetch(`/debug/gradual-hold?enabled=${enabled}`, { method: "POST" });
+        const result = await response.json();
+        if (!result.ok) {
+          event.target.checked = false;
+          console.error("gradual hold failed", result.error);
+        }
+      } catch (e) {
+        event.target.checked = false;
+        console.error("gradual hold failed", e);
+      }
+    });
     document.getElementById("dbgClearSim").addEventListener("click", async () => {
       try {
         await fetch("/debug/clear", { method: "POST" });
+        document.getElementById("dbgGradualHold").checked = false;
       } catch (e) {
         console.error("debug clear failed", e);
       }

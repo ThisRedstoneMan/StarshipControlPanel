@@ -28,6 +28,11 @@ MAX_EVENT_HISTORY = 10
 # the override is cleared.
 debug_override = {"active": False, "launch_timestamp": None}
 
+# A hold that is reported as a series of small T-0 slips is represented as
+# one event, whose duration grows until the timestamp stops moving.
+active_hold = None
+gradual_hold = {"active": False, "thread": None}
+
 
 def fetch_clock_async():
     global signed_seconds, launch_timestamp
@@ -42,8 +47,7 @@ def fetch_clock_async():
             # get immediately overwritten/confused by a real poll.
             if not debug_override["active"]:
                 event = classify_timestamp_change(real_previous_ts, new_real_ts)
-                if event is not None:
-                    record_countdown_event(event)
+                handle_timestamp_event(event)
             real_previous_ts = new_real_ts
 
         if debug_override["active"]:
@@ -121,6 +125,82 @@ def record_countdown_event(event, simulated=False):
     print(f"[countdown] {message}")
 
 
+def handle_timestamp_event(event, simulated=False):
+    """Record timestamp changes, merging consecutive small positive slips.
+
+    A launch provider can express a hold by moving T-0 forward one second at
+    a time.  Updating the same history entry avoids treating that as hundreds
+    of separate holds.
+    """
+    global active_hold
+
+    if event is None:
+        active_hold = None
+        return
+
+    is_small_positive_hold = event["type"] == "hold" and event["delta_seconds"] > 0
+    if not is_small_positive_hold:
+        active_hold = None
+        record_countdown_event(event, simulated=simulated)
+        return
+
+    if active_hold is None:
+        record_countdown_event(event, simulated=simulated)
+        active_hold = {
+            "entry": current_state["countdown_status"],
+            "delta_seconds": event["delta_seconds"],
+            "simulated": simulated,
+        }
+        return
+
+    # Keep the current banner and the most-recent history entry in sync;
+    # they refer to the same dictionary.
+    active_hold["delta_seconds"] += event["delta_seconds"]
+    total = active_hold["delta_seconds"]
+    prefix = "[TEST] " if active_hold["simulated"] else ""
+    active_hold["entry"].update({
+        "message": f"{prefix}Hold detected - T-0 slipped {format_duration(total)}",
+        "delta_seconds": total,
+        "detected_at": time.time(),
+    })
+
+
+def _gradual_hold_loop():
+    """Advance the debug T-0 by one second per real second while enabled."""
+    while gradual_hold["active"]:
+        time.sleep(1)
+        if not gradual_hold["active"]:
+            break
+
+        baseline = debug_override["launch_timestamp"]
+        if baseline is None:
+            continue
+        new_timestamp = baseline + 1
+        event = classify_timestamp_change(baseline, new_timestamp)
+        debug_override["launch_timestamp"] = new_timestamp
+        handle_timestamp_event(event, simulated=True)
+
+
+def debug_set_gradual_hold(enabled):
+    """Start or stop a debug hold which slips T-0 by one second per second."""
+    if enabled:
+        baseline = debug_override["launch_timestamp"] if debug_override["active"] else launch_timestamp
+        if not baseline:
+            return {"ok": False, "error": "No launch timestamp known yet - wait for the first real fetch."}
+
+        debug_override["active"] = True
+        debug_override["launch_timestamp"] = baseline
+        if not gradual_hold["active"]:
+            gradual_hold["active"] = True
+            gradual_hold["thread"] = threading.Thread(target=_gradual_hold_loop, daemon=True)
+            gradual_hold["thread"].start()
+        return {"ok": True, "enabled": True}
+
+    gradual_hold["active"] = False
+    debug_clear_override()
+    return {"ok": True, "enabled": False}
+
+
 def debug_simulate_shift(delta_seconds):
     """
     Artificially shifts T-0 by delta_seconds, for testing hold/delay
@@ -135,8 +215,7 @@ def debug_simulate_shift(delta_seconds):
 
     new_ts = baseline + delta_seconds
     event = classify_timestamp_change(baseline, new_ts)
-    if event is not None:
-        record_countdown_event(event, simulated=True)
+    handle_timestamp_event(event, simulated=True)
 
     debug_override["active"] = True
     debug_override["launch_timestamp"] = new_ts
@@ -146,6 +225,9 @@ def debug_simulate_shift(delta_seconds):
 def debug_clear_override():
     """Stops the simulation; fetch_clock_async resumes from whatever the
     real countdown actually is (it never stopped tracking it)."""
+    global active_hold
+    gradual_hold["active"] = False
+    active_hold = None
     debug_override["active"] = False
     debug_override["launch_timestamp"] = None
     return {"ok": True}

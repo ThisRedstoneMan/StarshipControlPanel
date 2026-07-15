@@ -1,20 +1,37 @@
 import asyncio
 import json
 import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 # Import our shared state and background thread runner
 from main import (
     current_state,
     telemetry_update_loop,
     debug_simulate_shift,
+    debug_set_gradual_hold,
     debug_clear_override,
 )
 
-app = FastAPI()
 connected_clients: set[WebSocket] = set()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    broadcast_task = asyncio.create_task(broadcast_loop())
+    threading.Thread(target=telemetry_update_loop, daemon=True).start()
+    try:
+        yield
+    finally:
+        broadcast_task.cancel()
+        try:
+            await broadcast_task
+        except asyncio.CancelledError:
+            pass
+
+app = FastAPI(lifespan=lifespan)
 
 @app.websocket("/ws/state")
 async def websocket_endpoint(websocket: WebSocket):
@@ -40,16 +57,6 @@ async def broadcast_loop():
         connected_clients.difference_update(dead_clients)
         await asyncio.sleep(0.5)
 
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(broadcast_loop())
-    threading.Thread(target=telemetry_update_loop, daemon=True).start()
-
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    html_path = Path(__file__).parent / "web" / "index.html"
-    return html_path.read_text(encoding="utf-8")
-
 # ---------------------------------------------------------------------
 # Debug-only routes: let the phone/browser trigger a fake hold or delay
 # to test detection + the banner + history, without waiting on a real
@@ -63,6 +70,15 @@ async def debug_simulate(delta_seconds: float):
 @app.post("/debug/clear")
 async def debug_clear():
     return debug_clear_override()
+
+@app.post("/debug/gradual-hold")
+async def debug_gradual_hold(enabled: bool):
+    return debug_set_gradual_hold(enabled)
+
+# Keep this mount last: the API and WebSocket routes above take priority,
+# while the browser can load index.html, timeline.js, and future web assets.
+WEB_DIRECTORY = Path(__file__).parent / "web"
+app.mount("/", StaticFiles(directory=WEB_DIRECTORY, html=True), name="web")
 
 if __name__ == "__main__":
     import uvicorn
