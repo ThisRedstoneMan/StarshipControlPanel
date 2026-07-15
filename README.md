@@ -1,6 +1,6 @@
 # Starship Control Panel
 
-A small Python command-line utility that displays a live Starship mission clock relative to a configured launch time.
+A small app that displays a live Starship mission clock relative to a configured launch time.
 
 The app retrieves SpaceX future-mission data, finds the selected flight by ID, and prints a clock in `T- HH : MM : SS` before launch or `T+ HH : MM : SS` after launch.
 
@@ -37,5 +37,5 @@ updateInterval = 0.5
 
 - `main.py` - entry point and repeating countdown display.
 - `libraries/countdownLib.py` - fetches mission data, calculates time from launch, and formats the clock.
-- `libraries/generalLib.py` - cross-platform system-beep helper.
+- `libraries/generalLib.py` - cross-platform system-beep helper for future use.
 - `data/milestones.json` - planned countdown and flight milestone data.

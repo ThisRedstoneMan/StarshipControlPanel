@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Starship Control Panel</title>
+  <style>
+    body {
+      background: #0a0d12;
+      color: #e6edf3;
+      font-family: "Courier New", monospace;
+      margin: 0;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      font-size: 1rem;
+      letter-spacing: 4px;
+      color: #7d8590;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .status {
+      font-size: 0.75rem;
+      color: #3fb950;
+      margin-bottom: 32px;
+    }
+    .status.offline {
+      color: #f85149;
+    }
+    .clock {
+      font-size: 3rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+    }
+    .phase {
+      font-size: 1rem;
+      color: #58a6ff;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      margin-bottom: 40px;
+    }
+    .error {
+      color: #f85149;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Starship Control Panel</h1>
+  <div class="status offline" id="status">connecting...</div>
+  <div class="clock" id="clock">T- 00:00:00</div>
+  <div class="phase" id="phase">--</div>
+  <div class="error" id="error"></div>
+
+  <script>
+    function connect() {
+      const proto = window.location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${proto}://${window.location.host}/ws/state`);
+
+      ws.onopen = () => {
+        document.getElementById("status").textContent = "live";
+        document.getElementById("status").classList.remove("offline");
+      };
+
+      ws.onclose = () => {
+        document.getElementById("status").textContent = "disconnected — retrying...";
+        document.getElementById("status").classList.add("offline");
+        setTimeout(connect, 1500); // auto-reconnect
+      };
+
+      ws.onerror = () => ws.close();
+
+      ws.onmessage = (event) => {
+        const state = JSON.parse(event.data);
+        if (state.ok) {
+          document.getElementById("clock").textContent = state.clock;
+          document.getElementById("phase").textContent = state.phase;
+          document.getElementById("error").textContent = "";
+        } else {
+          document.getElementById("error").textContent = state.error;
+        }
+      };
+    }
+
+    connect();
+  </script>
+</body>
+</html>
