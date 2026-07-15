@@ -1,6 +1,10 @@
 {
     "CountdownMilestones": [
         {
+            "name": "Start of NSF's Stream",
+            "time": -14400
+        },
+        {
             "name": "Go for Prop Load",
             "time": -3000
         },
@@ -19,6 +23,10 @@
         {
             "name": "Ship LOX Load",
             "time": -2053
+        },
+        {
+            "name": "SpaceX Stream Start",
+            "time": -1800
         },
         {
             "name": "Engine Chill",

@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Starship Control Panel</title>
   <style>
+    :root {
+      --tl-line: #e6edf3;
+      --tl-label: #7d8590;
+      --tl-marker: #58a6ff;
+    }
     body {
       background: #0a0d12;
       color: #e6edf3;
@@ -22,41 +27,285 @@
       text-transform: uppercase;
       margin-bottom: 4px;
     }
-    .status {
+    .status { font-size: 0.75rem; color: #3fb950; margin-bottom: 32px; }
+    .status.offline { color: #f85149; }
+    .clock { font-size: 3rem; font-weight: bold; letter-spacing: 2px; margin-bottom: 8px; }
+    .phase { font-size: 1rem; color: #58a6ff; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 40px; }
+    .error { color: #f85149; font-size: 0.9rem; }
+
+    /* ---- Hold / delay banner ---- */
+    .countdown-banner {
+      display: none;
+      max-width: 900px;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      letter-spacing: 0.5px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .countdown-banner.visible { display: block; }
+    .countdown-banner.hold {
+      background: rgba(210, 153, 34, 0.12);
+      border: 1px solid #d29922;
+      color: #d29922;
+    }
+    .countdown-banner.delay {
+      background: rgba(248, 81, 73, 0.12);
+      border: 1px solid #f85149;
+      color: #f85149;
+    }
+    .countdown-banner.simulated {
+      border-style: dashed;
+    }
+
+    /* ---- Timeline ---- */
+    #timeline {
+      width: 100%;
+      max-width: 900px;
+      margin-top: 8px;
+    }
+    .tl-scroll {
+      width: 100%;
+      overflow-x: hidden; /* auto-centered by JS, not user-scrolled */
+      -webkit-overflow-scrolling: touch;
+    }
+    .tl-svg { display: block; }
+    .tl-next-label {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: var(--tl-label);
+      text-align: center;
+      letter-spacing: 1px;
+    }
+
+    /* ---- Debug panel ---- */
+    .debug-panel {
+      width: 100%;
+      max-width: 900px;
+      margin-top: 32px;
+      border: 1px solid #21262d;
+      border-radius: 6px;
+      padding: 10px 14px;
       font-size: 0.75rem;
-      color: #3fb950;
-      margin-bottom: 32px;
+      color: var(--tl-label);
     }
-    .status.offline {
-      color: #f85149;
-    }
-    .clock {
-      font-size: 3rem;
-      font-weight: bold;
-      letter-spacing: 2px;
-      margin-bottom: 8px;
-    }
-    .phase {
-      font-size: 1rem;
-      color: #58a6ff;
+    .debug-panel summary {
+      cursor: pointer;
+      color: #e6edf3;
+      letter-spacing: 1px;
       text-transform: uppercase;
-      letter-spacing: 3px;
-      margin-bottom: 40px;
+      font-size: 0.7rem;
     }
-    .error {
-      color: #f85149;
-      font-size: 0.9rem;
+    .dbg-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .dbg-row input[type="range"] { flex: 1; }
+    #dbgTimeLabel {
+      min-width: 90px;
+      text-align: right;
+      color: #58a6ff;
+    }
+    .debug-panel button, .debug-panel select {
+      background: #161b22;
+      color: #e6edf3;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-family: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .debug-panel button:disabled, .debug-panel select:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
     }
   </style>
 </head>
 <body>
   <h1>Starship Control Panel</h1>
   <div class="status offline" id="status">connecting...</div>
+  <div class="countdown-banner" id="countdownBanner"></div>
   <div class="clock" id="clock">T- 00:00:00</div>
   <div class="phase" id="phase">--</div>
   <div class="error" id="error"></div>
 
-  <script>
+  <div id="timeline"></div>
+
+  <details class="debug-panel">
+    <summary>Debug / Test Timeline</summary>
+    <label><input type="checkbox" id="dbgEnable" /> Manual time override</label>
+    <div class="dbg-row">
+      <input type="range" id="dbgSlider" min="-3000" max="4000" value="0" step="1" disabled />
+      <span id="dbgTimeLabel">T+ 00:00:00</span>
+    </div>
+    <div class="dbg-row">
+      <button id="dbgPlay" disabled>▶ Play</button>
+      <select id="dbgSpeed" disabled>
+        <option value="1">1x</option>
+        <option value="10" selected>10x</option>
+        <option value="50">50x</option>
+        <option value="200">200x</option>
+      </select>
+      <button id="dbgReset" disabled>Reset to live</button>
+    </div>
+  </details>
+
+  <details class="debug-panel">
+    <summary>Debug / Simulate Hold or Delay</summary>
+    <p style="margin: 4px 0 0; font-size: 0.7rem;">
+      Sends a fake T-0 shift through the real detection pipeline (server-side),
+      so the banner and history reflect an actual test event, tagged [TEST].
+    </p>
+    <div class="dbg-row">
+      <button id="dbgHoldShort">+30s hold</button>
+      <button id="dbgHoldLong">+5min hold</button>
+      <button id="dbgDelay">+2hr delay</button>
+      <button id="dbgClearSim">Clear simulation</button>
+    </div>
+  </details>
+
+  <script type="module">
+    import { initTimeline } from "./timeline.js";
+
+    const timeline = initTimeline(document.getElementById("timeline"));
+
+    // ---- Debug panel wiring -------------------------------------------
+    const dbgEnable = document.getElementById("dbgEnable");
+    const dbgSlider = document.getElementById("dbgSlider");
+    const dbgTimeLabel = document.getElementById("dbgTimeLabel");
+    const dbgPlay = document.getElementById("dbgPlay");
+    const dbgSpeed = document.getElementById("dbgSpeed");
+    const dbgReset = document.getElementById("dbgReset");
+
+    function formatT(s) {
+      const sign = s >= 0 ? "+" : "-";
+      const abs = Math.abs(Math.round(s));
+      const hh = String(Math.floor(abs / 3600)).padStart(2, "0");
+      const mm = String(Math.floor((abs % 3600) / 60)).padStart(2, "0");
+      const ss = String(abs % 60).padStart(2, "0");
+      return `T${sign} ${hh}:${mm}:${ss}`;
+    }
+
+    // How long to keep a hold/delay banner visible after it was detected,
+    // before it fades back to just being in countdown_events history.
+    const BANNER_VISIBLE_SECONDS = 120;
+
+    function updateCountdownBanner(status) {
+      const el = document.getElementById("countdownBanner");
+      if (!status || status.type === "nominal" || !status.detected_at) {
+        el.classList.remove("visible", "hold", "delay", "simulated");
+        return;
+      }
+      const ageSeconds = Date.now() / 1000 - status.detected_at;
+      if (ageSeconds > BANNER_VISIBLE_SECONDS) {
+        el.classList.remove("visible", "hold", "delay", "simulated");
+        return;
+      }
+      el.textContent = status.message;
+      el.classList.remove("hold", "delay", "simulated");
+      el.classList.add("visible", status.type);
+      if (status.simulated) el.classList.add("simulated");
+    }
+
+    async function simulateShift(deltaSeconds) {
+      try {
+        await fetch(`/debug/simulate?delta_seconds=${deltaSeconds}`, { method: "POST" });
+      } catch (e) {
+        console.error("debug simulate failed", e);
+      }
+    }
+
+    document.getElementById("dbgHoldShort").addEventListener("click", () => simulateShift(30));
+    document.getElementById("dbgHoldLong").addEventListener("click", () => simulateShift(300));
+    document.getElementById("dbgDelay").addEventListener("click", () => simulateShift(7200));
+    document.getElementById("dbgClearSim").addEventListener("click", async () => {
+      try {
+        await fetch("/debug/clear", { method: "POST" });
+      } catch (e) {
+        console.error("debug clear failed", e);
+      }
+    });
+
+    function setControlsEnabled(enabled) {
+      dbgSlider.disabled = !enabled;
+      dbgPlay.disabled = !enabled;
+      dbgSpeed.disabled = !enabled;
+      dbgReset.disabled = !enabled;
+    }
+
+    function updateDbgLabel(t) {
+      dbgTimeLabel.textContent = formatT(t);
+    }
+
+    // Once real milestone data has arrived, widen the slider to the
+    // mission's actual T- / T+ range instead of the placeholder bounds.
+    function syncSliderBounds() {
+      const bounds = timeline.getTimeBounds();
+      if (bounds) {
+        dbgSlider.min = bounds.min;
+        dbgSlider.max = bounds.max;
+      }
+    }
+
+    dbgEnable.addEventListener("change", () => {
+      const on = dbgEnable.checked;
+      setControlsEnabled(on);
+      if (on) {
+        syncSliderBounds();
+        timeline.setDebugTime(Number(dbgSlider.value));
+        updateDbgLabel(Number(dbgSlider.value));
+      } else {
+        timeline.clearDebugTime();
+        dbgPlay.textContent = "▶ Play";
+      }
+    });
+
+    dbgSlider.addEventListener("input", () => {
+      timeline.setDebugTime(Number(dbgSlider.value));
+      updateDbgLabel(Number(dbgSlider.value));
+    });
+
+    dbgPlay.addEventListener("click", () => {
+      const playing = !timeline.isDebugPlaying();
+      timeline.setDebugPlaying(playing, Number(dbgSpeed.value));
+      dbgPlay.textContent = playing ? "⏸ Pause" : "▶ Play";
+      if (playing) syncPlaybackLoop();
+    });
+
+    dbgSpeed.addEventListener("change", () => {
+      if (timeline.isDebugPlaying()) {
+        timeline.setDebugPlaying(true, Number(dbgSpeed.value));
+      }
+    });
+
+    dbgReset.addEventListener("click", () => {
+      dbgEnable.checked = false;
+      setControlsEnabled(false);
+      timeline.clearDebugTime();
+      dbgPlay.textContent = "▶ Play";
+    });
+
+    // While auto-playing, keep the slider + label in sync with the
+    // timeline's internally-advancing debug time.
+    function syncPlaybackLoop() {
+      if (!timeline.isDebugPlaying()) {
+        dbgPlay.textContent = "▶ Play"; // auto-stopped at mission end
+        return;
+      }
+      const t = timeline.getEstimatedTime();
+      if (t !== null) {
+        dbgSlider.value = t;
+        updateDbgLabel(t);
+      }
+      requestAnimationFrame(syncPlaybackLoop);
+    }
+
     function connect() {
       const proto = window.location.protocol === "https:" ? "wss" : "ws";
       const ws = new WebSocket(`${proto}://${window.location.host}/ws/state`);
@@ -69,7 +318,7 @@
       ws.onclose = () => {
         document.getElementById("status").textContent = "disconnected — retrying...";
         document.getElementById("status").classList.add("offline");
-        setTimeout(connect, 1500); // auto-reconnect
+        setTimeout(connect, 1500);
       };
 
       ws.onerror = () => ws.close();
@@ -80,6 +329,8 @@
           document.getElementById("clock").textContent = state.clock;
           document.getElementById("phase").textContent = state.phase;
           document.getElementById("error").textContent = "";
+          timeline.update(state);
+          updateCountdownBanner(state.countdown_status);
         } else {
           document.getElementById("error").textContent = state.error;
         }
