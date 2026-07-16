@@ -1,8 +1,16 @@
 {
     "CountdownMilestones": [
         {
-            "name": "Start of NSF's Stream",
-            "time": -14400
+            "name": "Start of NSF's Stakeout Stream",
+            "time": -32400
+        },
+        {
+            "name": "Beach Closure Begins",
+            "time": -20700
+        },
+        {
+            "name": "Start of NSF's Launch Stream",
+            "time": -10800
         },
         {
             "name": "Go for Prop Load",

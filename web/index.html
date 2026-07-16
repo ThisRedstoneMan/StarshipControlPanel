@@ -147,7 +147,7 @@
       text-align: right;
       color: #58a6ff;
     }
-    .debug-panel button, .debug-panel select {
+    .debug-panel button, .debug-panel select, .debug-panel input[type="number"] {
       background: #161b22;
       color: #e6edf3;
       border: 1px solid #30363d;
@@ -233,6 +233,10 @@
       </div>
       <div class="dbg-row">
         <button id="dbgJumpServer" disabled>Jump countdown here</button>
+      </div>
+      <div class="dbg-row">
+        <input type="number" id="dbgAdvanceSeconds" min="1" step="1" value="60" aria-label="Seconds to advance" />
+        <button id="dbgAdvanceButton">Advance countdown</button>
       </div>
     </details>
 
@@ -443,6 +447,27 @@
       setControlsEnabled(false);
       timeline.clearDebugTime();
       dbgPlay.textContent = "▶ Play";
+    });
+
+    async function advanceCountdown() {
+      const input = document.getElementById("dbgAdvanceSeconds");
+      const seconds = Number(input.value);
+      if (!Number.isFinite(seconds) || seconds <= 0) {
+        input.focus();
+        return;
+      }
+      try {
+        const response = await fetch(`/debug/advance?seconds=${seconds}`, { method: "POST" });
+        const result = await response.json();
+        if (!result.ok) console.error("advance countdown failed", result.error);
+      } catch (e) {
+        console.error("advance countdown failed", e);
+      }
+    }
+
+    document.getElementById("dbgAdvanceButton").addEventListener("click", advanceCountdown);
+    document.getElementById("dbgAdvanceSeconds").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") advanceCountdown();
     });
 
     dbgPlay.addEventListener("click", () => {

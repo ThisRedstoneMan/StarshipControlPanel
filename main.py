@@ -293,6 +293,28 @@ def debug_set_time(signed_seconds):
     return {"ok": True, "launch_timestamp": target_ts}
 
 
+def debug_advance_countdown(seconds):
+    """Move the debug countdown forward by a positive number of seconds."""
+    global launch_timestamp, signed_seconds
+
+    if seconds <= 0:
+        return {"ok": False, "error": "Advance time must be greater than zero."}
+
+    baseline = debug_override["launch_timestamp"] if debug_override["active"] else launch_timestamp
+    if not baseline:
+        return {"ok": False, "error": "No launch timestamp known yet - wait for the first real fetch."}
+
+    # Moving T-0 earlier moves the displayed T clock forward. This is a
+    # direct debug control, so it does not create a hold/delay event or
+    # reset the current hold-fuel budget.
+    new_timestamp = baseline - seconds
+    debug_override["active"] = True
+    debug_override["launch_timestamp"] = new_timestamp
+    launch_timestamp = new_timestamp
+    signed_seconds = getSignedSeconds(new_timestamp)
+    return {"ok": True, "launch_timestamp": new_timestamp, "advanced_seconds": seconds}
+
+
 def debug_clear_override():
     """Stops the simulation; fetch_clock_async resumes from whatever the
     real countdown actually is (it never stopped tracking it)."""

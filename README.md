@@ -118,6 +118,7 @@ Enable **Debug tools** in the top-right of the dashboard to reveal local testing
 
 - **Manual time override** previews a timeline time in the browser only.
 - **Jump countdown here** commits the selected time to the server and resets the hold-fuel budget.
+- **Advance countdown** moves the server-side debug clock forward by the entered number of seconds without resetting the hold-fuel budget.
 - **+30s hold**, **+5min hold**, and **+2hr delay** run simulated T-0 changes through the normal detector.
 - **Continuous hold** advances T-0 by one second per real second, useful for testing the merged hold event and fuel bar.
 - **Clear simulation** restores live mission data and resets test state.
@@ -131,6 +132,7 @@ The debug routes have no authentication. Keep this server on a trusted local net
 | `GET /` | Dashboard HTML and static assets |
 | `WS /ws/state` | Live dashboard state |
 | `POST /debug/set-time?signed_seconds=...` | Set a server-side debug countdown time |
+| `POST /debug/advance?seconds=...` | Advance the server-side debug countdown |
 | `POST /debug/simulate?delta_seconds=...` | Simulate a T-0 change |
 | `POST /debug/gradual-hold?enabled=true` | Start/stop the continuous hold simulation |
 | `POST /debug/clear` | Clear the debug override |
