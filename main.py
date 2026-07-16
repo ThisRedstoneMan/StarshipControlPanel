@@ -33,6 +33,16 @@ debug_override = {"active": False, "launch_timestamp": None}
 active_hold = None
 gradual_hold = {"active": False, "thread": None}
 
+# ---------------------------------------------------------------------
+# Hold fuel budget: once propellant load is complete, holds start eating
+# into a fixed budget (loaded propellant boils off — you can't just wait
+# around indefinitely). Real number pulled from your milestones.json.
+# ---------------------------------------------------------------------
+LOAD_COMPLETE_OFFSET = -130   # T-2:10, "Ship Load Complete" milestone
+HOLD_FUEL_BUDGET_SECONDS = 15 * 60  # 15 minutes
+
+hold_fuel_remaining = HOLD_FUEL_BUDGET_SECONDS
+
 
 def fetch_clock_async():
     global signed_seconds, launch_timestamp
@@ -87,6 +97,11 @@ current_state = {
         "simulated": False,
     },
     "countdown_events": [],      # history, most recent first
+    "hold_fuel": {
+        "budget_seconds": HOLD_FUEL_BUDGET_SECONDS,
+        "remaining_seconds": HOLD_FUEL_BUDGET_SECONDS,
+        "load_complete_offset": LOAD_COMPLETE_OFFSET,
+    },
 }
 
 
@@ -125,18 +140,51 @@ def record_countdown_event(event, simulated=False):
     print(f"[countdown] {message}")
 
 
+def update_fuel_state():
+    """Pushes the current hold_fuel_remaining value into current_state."""
+    current_state["hold_fuel"] = {
+        "budget_seconds": HOLD_FUEL_BUDGET_SECONDS,
+        "remaining_seconds": hold_fuel_remaining,
+        "load_complete_offset": LOAD_COMPLETE_OFFSET,
+    }
+
+
 def handle_timestamp_event(event, simulated=False):
     """Record timestamp changes, merging consecutive small positive slips.
 
     A launch provider can express a hold by moving T-0 forward one second at
     a time.  Updating the same history entry avoids treating that as hundreds
     of separate holds.
+
+    Also drives the hold fuel budget: once the countdown has already
+    reached propellant load complete (LOAD_COMPLETE_OFFSET), any further
+    hold time comes straight out of the fixed HOLD_FUEL_BUDGET_SECONDS
+    allowance. Moving back to before load complete (a recycle) or a large
+    schedule shift (a genuine delay/scrub) restores the full budget, since
+    that implies a fresh propellant load will happen again.
     """
-    global active_hold
+    global active_hold, hold_fuel_remaining
 
     if event is None:
         active_hold = None
         return
+
+    # Where does this change leave the live countdown, right now?
+    live_t = getSignedSeconds(event["new_timestamp"])
+
+    if live_t < LOAD_COMPLETE_OFFSET:
+        # Back before load complete — treat as a fresh attempt.
+        if hold_fuel_remaining != HOLD_FUEL_BUDGET_SECONDS:
+            hold_fuel_remaining = HOLD_FUEL_BUDGET_SECONDS
+            update_fuel_state()
+    elif event["type"] == "delay":
+        # A big schedule shift while already past load complete is still
+        # a new attempt from a fuel standpoint.
+        hold_fuel_remaining = HOLD_FUEL_BUDGET_SECONDS
+        update_fuel_state()
+    elif event["type"] == "hold" and event["delta_seconds"] > 0:
+        hold_fuel_remaining = max(0, hold_fuel_remaining - event["delta_seconds"])
+        update_fuel_state()
 
     is_small_positive_hold = event["type"] == "hold" and event["delta_seconds"] > 0
     if not is_small_positive_hold:
@@ -222,14 +270,39 @@ def debug_simulate_shift(delta_seconds):
     return {"ok": True, "new_timestamp": new_ts}
 
 
+def debug_set_time(signed_seconds):
+    """
+    Jumps the (debug) countdown to an arbitrary T- position relative to
+    right now, so you can start testing — e.g. hold-fuel behavior — from
+    any point in the mission without waiting for a real hold to get you
+    there. This is a real server-side jump (unlike the client-only preview
+    slider), so gradual_hold/debug_simulate_shift can continue naturally
+    from wherever you land. Resets the hold fuel budget and any
+    in-progress hold, since this is meant to be a clean starting point.
+    """
+    global active_hold, hold_fuel_remaining
+
+    target_ts = time.time() - signed_seconds
+    debug_override["active"] = True
+    debug_override["launch_timestamp"] = target_ts
+
+    active_hold = None
+    hold_fuel_remaining = HOLD_FUEL_BUDGET_SECONDS
+    update_fuel_state()
+
+    return {"ok": True, "launch_timestamp": target_ts}
+
+
 def debug_clear_override():
     """Stops the simulation; fetch_clock_async resumes from whatever the
     real countdown actually is (it never stopped tracking it)."""
-    global active_hold
+    global active_hold, hold_fuel_remaining
     gradual_hold["active"] = False
     active_hold = None
     debug_override["active"] = False
     debug_override["launch_timestamp"] = None
+    hold_fuel_remaining = HOLD_FUEL_BUDGET_SECONDS
+    update_fuel_state()
     return {"ok": True}
 
 

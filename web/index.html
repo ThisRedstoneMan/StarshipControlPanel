@@ -61,6 +61,42 @@
       border-style: dashed;
     }
 
+    /* ---- Hold fuel bar ---- */
+    .fuel-container {
+      width: 100%;
+      max-width: 900px;
+      margin-bottom: 24px;
+    }
+    .fuel-label-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.7rem;
+      letter-spacing: 1px;
+      color: var(--tl-label);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .fuel-track {
+      width: 100%;
+      height: 10px;
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .fuel-fill {
+      height: 100%;
+      width: 100%;
+      background: #3fb950;
+      transition: width 0.4s linear, background-color 0.4s linear;
+    }
+    .fuel-container.inactive .fuel-fill {
+      background: #30363d;
+    }
+    .fuel-container.inactive .fuel-label-row {
+      opacity: 0.5;
+    }
+
     /* ---- Timeline ---- */
     #timeline {
       width: 100%;
@@ -125,9 +161,33 @@
       opacity: 0.4;
       cursor: not-allowed;
     }
+
+    /* ---- Debug tools toggle ---- */
+    .debug-toggle {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.65rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--tl-label);
+      z-index: 10;
+    }
+    .debug-toggle input { cursor: pointer; }
+    .debug-toggle label { cursor: pointer; }
+    #debugTools { display: none; }
+    #debugTools.visible { display: block; }
   </style>
 </head>
 <body>
+  <label class="debug-toggle">
+    <input type="checkbox" id="showDebugTools" />
+    Debug tools
+  </label>
+
   <h1>Starship Control Panel</h1>
   <div class="status offline" id="status">connecting...</div>
   <div class="countdown-banner" id="countdownBanner"></div>
@@ -135,49 +195,75 @@
   <div class="phase" id="phase">--</div>
   <div class="error" id="error"></div>
 
+  <div class="fuel-container inactive" id="fuelContainer">
+    <div class="fuel-label-row">
+      <span>Hold Fuel</span>
+      <span id="fuelLabel">15:00 / 15:00</span>
+    </div>
+    <div class="fuel-track">
+      <div class="fuel-fill" id="fuelFill"></div>
+    </div>
+  </div>
+
   <div id="timeline"></div>
 
-  <details class="debug-panel">
-    <summary>Debug / Test Timeline</summary>
-    <label><input type="checkbox" id="dbgEnable" /> Manual time override</label>
-    <div class="dbg-row">
-      <input type="range" id="dbgSlider" min="-3000" max="4000" value="0" step="1" disabled />
-      <span id="dbgTimeLabel">T+ 00:00:00</span>
-    </div>
-    <div class="dbg-row">
-      <button id="dbgPlay" disabled>▶ Play</button>
-      <select id="dbgSpeed" disabled>
-        <option value="1">1x</option>
-        <option value="10" selected>10x</option>
-        <option value="50">50x</option>
-        <option value="200">200x</option>
-      </select>
-      <button id="dbgReset" disabled>Reset to live</button>
-    </div>
-  </details>
+  <div id="debugTools">
+    <details class="debug-panel">
+      <summary>Debug / Jump to a Time</summary>
+      <p style="margin: 4px 0 0; font-size: 0.7rem;">
+        Drag to preview the timeline at any point (client-only). Click
+        "Jump countdown here" to actually commit that position to the
+        server (resets hold fuel to 15:00) — then Simulate/Gradual Hold
+        below will continue from there.
+      </p>
+      <label><input type="checkbox" id="dbgEnable" /> Manual time override</label>
+      <div class="dbg-row">
+        <input type="range" id="dbgSlider" min="-3000" max="4000" value="0" step="1" disabled />
+        <span id="dbgTimeLabel">T+ 00:00:00</span>
+      </div>
+      <div class="dbg-row">
+        <button id="dbgPlay" disabled>▶ Play</button>
+        <select id="dbgSpeed" disabled>
+          <option value="1">1x</option>
+          <option value="10" selected>10x</option>
+          <option value="50">50x</option>
+          <option value="200">200x</option>
+        </select>
+        <button id="dbgReset" disabled>Reset to live</button>
+      </div>
+      <div class="dbg-row">
+        <button id="dbgJumpServer" disabled>Jump countdown here</button>
+      </div>
+    </details>
 
-  <details class="debug-panel">
-    <summary>Debug / Simulate Hold or Delay</summary>
-    <p style="margin: 4px 0 0; font-size: 0.7rem;">
-      Sends a fake T-0 shift through the real detection pipeline (server-side),
-      so the banner and history reflect an actual test event, tagged [TEST].
-    </p>
-    <label style="display: block; margin-top: 10px;">
-      <input type="checkbox" id="dbgGradualHold" />
-      Simulate a continuous hold (T-0 slips 1 second per second)
-    </label>
-    <div class="dbg-row">
-      <button id="dbgHoldShort">+30s hold</button>
-      <button id="dbgHoldLong">+5min hold</button>
-      <button id="dbgDelay">+2hr delay</button>
-      <button id="dbgClearSim">Clear simulation</button>
-    </div>
-  </details>
+    <details class="debug-panel">
+      <summary>Debug / Simulate Hold or Delay</summary>
+      <p style="margin: 4px 0 0; font-size: 0.7rem;">
+        Sends a fake T-0 shift through the real detection pipeline (server-side),
+        so the banner and history reflect an actual test event, tagged [TEST].
+      </p>
+      <label style="display: block; margin-top: 10px;">
+        <input type="checkbox" id="dbgGradualHold" />
+        Simulate a continuous hold (T-0 slips 1 second per second)
+      </label>
+      <div class="dbg-row">
+        <button id="dbgHoldShort">+30s hold</button>
+        <button id="dbgHoldLong">+5min hold</button>
+        <button id="dbgDelay">+2hr delay</button>
+        <button id="dbgClearSim">Clear simulation</button>
+      </div>
+    </details>
+  </div>
 
   <script type="module">
     import { initTimeline } from "./timeline.js";
 
     const timeline = initTimeline(document.getElementById("timeline"));
+
+    // ---- Debug tools visibility toggle ---------------------------------
+    document.getElementById("showDebugTools").addEventListener("change", (e) => {
+      document.getElementById("debugTools").classList.toggle("visible", e.target.checked);
+    });
 
     // ---- Debug panel wiring -------------------------------------------
     const dbgEnable = document.getElementById("dbgEnable");
@@ -186,6 +272,55 @@
     const dbgPlay = document.getElementById("dbgPlay");
     const dbgSpeed = document.getElementById("dbgSpeed");
     const dbgReset = document.getElementById("dbgReset");
+
+    function formatMMSS(seconds) {
+      const s = Math.max(0, Math.round(seconds));
+      const mm = String(Math.floor(s / 60)).padStart(2, "0");
+      const ss = String(s % 60).padStart(2, "0");
+      return `${mm}:${ss}`;
+    }
+
+    function updateFuelBar(holdFuel, tSeconds) {
+      const container = document.getElementById("fuelContainer");
+      const fill = document.getElementById("fuelFill");
+      const label = document.getElementById("fuelLabel");
+
+      if (!holdFuel || tSeconds === null) return;
+
+      const { budget_seconds, remaining_seconds, load_complete_offset } = holdFuel;
+      const pastLoadComplete = tSeconds >= load_complete_offset;
+
+      container.classList.toggle("inactive", !pastLoadComplete);
+      label.textContent = `${formatMMSS(remaining_seconds)} / ${formatMMSS(budget_seconds)}`;
+
+      const pct = budget_seconds > 0 ? (remaining_seconds / budget_seconds) * 100 : 0;
+      fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+
+      if (!pastLoadComplete) {
+        fill.style.backgroundColor = ""; // fall back to .inactive's grey
+      } else if (pct > 50) {
+        fill.style.backgroundColor = "#3fb950"; // green
+      } else if (pct > 20) {
+        fill.style.backgroundColor = "#d29922"; // amber
+      } else {
+        fill.style.backgroundColor = "#f85149"; // red
+      }
+    }
+
+    // Cache the latest hold_fuel numbers from the server, but drive the
+    // bar's "active/inactive" state and re-render off timeline.getEstimatedTime()
+    // every frame instead of the raw server t_seconds — that's the same
+    // time source the timeline's marker uses, so it already accounts for
+    // the manual debug slider / play controls. This means scrubbing the
+    // debug timeline actually shows how the fuel bar behaves at that point
+    // in the mission, without needing a real (or simulated) hold there.
+    let latestHoldFuel = null;
+
+    function fuelBarLoop() {
+      updateFuelBar(latestHoldFuel, timeline.getEstimatedTime());
+      requestAnimationFrame(fuelBarLoop);
+    }
+    requestAnimationFrame(fuelBarLoop);
 
     function formatT(s) {
       const sign = s >= 0 ? "+" : "-";
@@ -256,6 +391,7 @@
       dbgPlay.disabled = !enabled;
       dbgSpeed.disabled = !enabled;
       dbgReset.disabled = !enabled;
+      document.getElementById("dbgJumpServer").disabled = !enabled;
     }
 
     function updateDbgLabel(t) {
@@ -290,6 +426,25 @@
       updateDbgLabel(Number(dbgSlider.value));
     });
 
+    // Commits the slider's current position to the server as a real T-0
+    // shift (resetting hold fuel to a clean 15:00), then hands control
+    // back to live data — so gradual hold / simulate buttons continue
+    // naturally from exactly where you jumped to.
+    document.getElementById("dbgJumpServer").addEventListener("click", async () => {
+      const signedSeconds = Number(dbgSlider.value);
+      try {
+        await fetch(`/debug/set-time?signed_seconds=${signedSeconds}`, { method: "POST" });
+      } catch (e) {
+        console.error("debug set-time failed", e);
+        return;
+      }
+      // The server now reflects the jump — go back to following it live.
+      dbgEnable.checked = false;
+      setControlsEnabled(false);
+      timeline.clearDebugTime();
+      dbgPlay.textContent = "▶ Play";
+    });
+
     dbgPlay.addEventListener("click", () => {
       const playing = !timeline.isDebugPlaying();
       timeline.setDebugPlaying(playing, Number(dbgSpeed.value));
@@ -303,11 +458,17 @@
       }
     });
 
-    dbgReset.addEventListener("click", () => {
+    dbgReset.addEventListener("click", async () => {
       dbgEnable.checked = false;
       setControlsEnabled(false);
       timeline.clearDebugTime();
       dbgPlay.textContent = "▶ Play";
+      document.getElementById("dbgGradualHold").checked = false;
+      try {
+        await fetch("/debug/clear", { method: "POST" });
+      } catch (e) {
+        console.error("debug clear failed", e);
+      }
     });
 
     // While auto-playing, keep the slider + label in sync with the
@@ -350,6 +511,7 @@
           document.getElementById("error").textContent = "";
           timeline.update(state);
           updateCountdownBanner(state.countdown_status);
+          latestHoldFuel = state.hold_fuel;
         } else {
           document.getElementById("error").textContent = state.error;
         }

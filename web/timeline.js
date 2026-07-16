@@ -110,6 +110,9 @@ export function initTimeline(container) {
     );
 
     let nextMilestone = null;
+    let lastLabelX = -Infinity;
+    const MIN_LABEL_GAP = 46; // px between label centers before we skip one
+
     for (const p of points) {
       const x = p.vx + PADDING;
       const passed = p.time <= estT;
@@ -129,15 +132,22 @@ export function initTimeline(container) {
            </circle>`
         );
       }
-      const [line1, line2, line3] = wrapLabel(p.name);
-      svgParts.push(
-        `<text x="${x}" y="${TRACK_Y + 24}" font-size="9" fill="var(--tl-label, #7d8590)"
-               text-anchor="middle">
-           <tspan x="${x}" dy="0">${escapeXml(line1)}</tspan>
-           ${line2 ? `<tspan x="${x}" dy="11">${escapeXml(line2)}</tspan>` : ""}
-           ${line3 ? `<tspan x="${x}" dy="11">${escapeXml(line3)}</tspan>` : ""}
-         </text>`
-      );
+
+      // In dense clusters, skip labels that would overlap the previous
+      // one; the circle + hover tooltip (<title>) are still there.
+      const showLabel = x - lastLabelX >= MIN_LABEL_GAP;
+      if (showLabel) {
+        lastLabelX = x;
+        const [line1, line2, line3] = wrapLabel(p.name);
+        svgParts.push(
+          `<text x="${x}" y="${TRACK_Y + 24}" font-size="9" fill="var(--tl-label, #7d8590)"
+                 text-anchor="middle">
+             <tspan x="${x}" dy="0">${escapeXml(line1)}</tspan>
+             ${line2 ? `<tspan x="${x}" dy="11">${escapeXml(line2)}</tspan>` : ""}
+             ${line3 ? `<tspan x="${x}" dy="11">${escapeXml(line3)}</tspan>` : ""}
+           </text>`
+        );
+      }
     }
 
     // Player marker — sized to nest inside a hollow ring.
@@ -266,8 +276,12 @@ function wrapLabel(name, maxLineLen = 6) {
 
 function formatSeconds(s) {
   const abs = Math.abs(Math.round(s));
-  const mm = String(Math.floor(abs / 60)).padStart(2, "0");
+  const hh = Math.floor(abs / 3600);
+  const mm = String(Math.floor((abs % 3600) / 60)).padStart(2, "0");
   const ss = String(abs % 60).padStart(2, "0");
+  if (hh > 0) {
+    return `${hh}:${mm}:${ss}`;
+  }
   return `${mm}:${ss}`;
 }
 

@@ -13,6 +13,7 @@ from main import (
     telemetry_update_loop,
     debug_simulate_shift,
     debug_set_gradual_hold,
+    debug_set_time,
     debug_clear_override,
 )
 
@@ -66,6 +67,10 @@ async def broadcast_loop():
 @app.post("/debug/simulate")
 async def debug_simulate(delta_seconds: float):
     return debug_simulate_shift(delta_seconds)
+
+@app.post("/debug/set-time")
+async def debug_set_time_route(signed_seconds: float):
+    return debug_set_time(signed_seconds)
 
 @app.post("/debug/clear")
 async def debug_clear():
