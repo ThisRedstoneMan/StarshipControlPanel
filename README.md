@@ -10,6 +10,7 @@ A lightweight, real-time Starship launch dashboard for a browser on your compute
 - Automatic comparison of consecutive T-0 timestamps to identify holds, resumed countdowns, delays, and earlier launch times.
 - Consecutive small T-0 slips are grouped into one growing hold event instead of flooding the event history.
 - Post-load hold-fuel bar: after Ship Load Complete at T-2:10, a 15-minute hold budget is tracked and displayed.
+- Shared weather GO/NO-GO indicator, visible to every connected client.
 - Debug controls for timeline scrubbing, server-side time jumps, simulated holds/delays, and a continuous one-second-per-second hold.
 
 ## Requirements
@@ -121,6 +122,7 @@ Enable **Debug tools** in the top-right of the dashboard to reveal local testing
 - **Advance countdown** moves the server-side debug clock forward by the entered number of seconds without resetting the hold-fuel budget.
 - **+30s hold**, **+5min hold**, and **+2hr delay** run simulated T-0 changes through the normal detector.
 - **Continuous hold** advances T-0 by one second per real second, useful for testing the merged hold event and fuel bar.
+- **Toggle weather GO / NO-GO** changes the shared weather indicator for every connected browser.
 - **Clear simulation** restores live mission data and resets test state.
 
 The debug routes have no authentication. Keep this server on a trusted local network; do not expose it directly to the public internet.
@@ -133,6 +135,7 @@ The debug routes have no authentication. Keep this server on a trusted local net
 | `WS /ws/state` | Live dashboard state |
 | `POST /debug/set-time?signed_seconds=...` | Set a server-side debug countdown time |
 | `POST /debug/advance?seconds=...` | Advance the server-side debug countdown |
+| `POST /debug/toggle-weather` | Toggle the shared weather GO/NO-GO state |
 | `POST /debug/simulate?delta_seconds=...` | Simulate a T-0 change |
 | `POST /debug/gradual-hold?enabled=true` | Start/stop the continuous hold simulation |
 | `POST /debug/clear` | Clear the debug override |

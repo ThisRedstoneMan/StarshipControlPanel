@@ -15,6 +15,14 @@ from main import (
     debug_set_gradual_hold,
     debug_set_time,
     debug_advance_countdown,
+    debug_toggle_weather,
+    debug_toggle_pad_clear,
+    debug_toggle_road_closed,
+    debug_toggle_tank_farm_chilldown,
+    debug_toggle_fts_armed,
+    debug_toggle_deluge_ready,
+    debug_toggle_telemetry_link,
+    debug_toggle_flight_director_go,
     debug_clear_override,
 )
 
@@ -76,6 +84,38 @@ async def debug_set_time_route(signed_seconds: float):
 @app.post("/debug/advance")
 async def debug_advance(seconds: float):
     return debug_advance_countdown(seconds)
+
+@app.post("/debug/toggle-weather")
+async def debug_toggle_weather_route():
+    return debug_toggle_weather()
+
+@app.post("/debug/toggle-pad-clear")
+async def debug_toggle_pad_clear_route():
+    return debug_toggle_pad_clear()
+
+@app.post("/debug/toggle-road-closed")
+async def debug_toggle_road_closed_route():
+    return debug_toggle_road_closed()
+
+@app.post("/debug/toggle-tank-farm-chilldown")
+async def debug_toggle_tank_farm_chilldown_route():
+    return debug_toggle_tank_farm_chilldown()
+
+@app.post("/debug/toggle-fts-armed")
+async def debug_toggle_fts_armed_route():
+    return debug_toggle_fts_armed()
+
+@app.post("/debug/toggle-deluge-ready")
+async def debug_toggle_deluge_ready_route():
+    return debug_toggle_deluge_ready()
+
+@app.post("/debug/toggle-telemetry-link")
+async def debug_toggle_telemetry_link_route():
+    return debug_toggle_telemetry_link()
+
+@app.post("/debug/toggle-flight-director-go")
+async def debug_toggle_flight_director_go_route():
+    return debug_toggle_flight_director_go()
 
 @app.post("/debug/clear")
 async def debug_clear():

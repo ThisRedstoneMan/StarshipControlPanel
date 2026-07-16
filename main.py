@@ -102,7 +102,43 @@ current_state = {
         "remaining_seconds": HOLD_FUEL_BUDGET_SECONDS,
         "load_complete_offset": LOAD_COMPLETE_OFFSET,
     },
+    # Manual shared status toggles. A future weather/range-ops data source
+    # can update these same values; the debug routes below are useful
+    # during development.
+    "weather": {"go": True},
+    "pad_clear": {"go": True},
+    "road_closed": {"go": True},
+    "tank_farm_chilldown": {"go": True},
+    # More ground/vehicle status toggles — informational for now, not
+    # wired into the Range composite, but easy to add later if desired.
+    "fts_armed": {"go": True},
+    "deluge_ready": {"go": True},
+    "telemetry_link": {"go": True},
+    "flight_director_go": {"go": True},
+    # Derived: green only when weather, pad_clear, and road_closed are all
+    # green. Tank farm chilldown is tracked but doesn't gate Range.
+    "range": {"go": True},
 }
+
+
+def _update_range_status():
+    """Recomputes the Range composite from weather, pad_clear, and
+    road_closed (tank_farm_chilldown is informational only)."""
+    current_state["range"] = {
+        "go": (
+            current_state["weather"]["go"]
+            and current_state["pad_clear"]["go"]
+            and current_state["road_closed"]["go"]
+        )
+    }
+
+
+def _toggle_status(key):
+    """Generic GO/NO-GO toggle for a simple {"go": bool} status field."""
+    status = current_state[key]
+    status["go"] = not status["go"]
+    _update_range_status()
+    return {"ok": True, "go": status["go"]}
 
 
 def record_countdown_event(event, simulated=False):
@@ -147,6 +183,47 @@ def update_fuel_state():
         "remaining_seconds": hold_fuel_remaining,
         "load_complete_offset": LOAD_COMPLETE_OFFSET,
     }
+
+
+def debug_toggle_weather():
+    """Toggle the shared weather GO/NO-GO state for every connected client."""
+    return _toggle_status("weather")
+
+
+def debug_toggle_pad_clear():
+    """Toggle the shared Pad Clear GO/NO-GO state."""
+    return _toggle_status("pad_clear")
+
+
+def debug_toggle_road_closed():
+    """Toggle the shared Road Closed GO/NO-GO state."""
+    return _toggle_status("road_closed")
+
+
+def debug_toggle_tank_farm_chilldown():
+    """Toggle the shared Tank Farm Chilldown GO/NO-GO state. Tracked for
+    display but does not factor into the Range composite status."""
+    return _toggle_status("tank_farm_chilldown")
+
+
+def debug_toggle_fts_armed():
+    """Toggle the shared Flight Termination System armed state."""
+    return _toggle_status("fts_armed")
+
+
+def debug_toggle_deluge_ready():
+    """Toggle the shared water deluge system readiness state."""
+    return _toggle_status("deluge_ready")
+
+
+def debug_toggle_telemetry_link():
+    """Toggle the shared ground telemetry/comms link state."""
+    return _toggle_status("telemetry_link")
+
+
+def debug_toggle_flight_director_go():
+    """Toggle the shared Flight Director GO/NO-GO poll state."""
+    return _toggle_status("flight_director_go")
 
 
 def handle_timestamp_event(event, simulated=False):
