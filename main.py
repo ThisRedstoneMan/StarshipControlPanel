@@ -9,7 +9,7 @@ from libraries.countdownLib import (
     format_duration,
 )
 
-spacexCountdownUrl = "https://content.spacex.com/cms-assets/future_missions.json"
+spacexCountdownUrl = "https://content.spacex.com/api/spacex-website/launches-page-tiles/upcoming"
 flightID = "F343A80AAFA11416DBEA660C9ADB5728982363A1DB46756A4C4C86849048088B"
 fetchInterval = 0.5  # in seconds
 updateInterval = 0.1  # in seconds

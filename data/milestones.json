@@ -25,16 +25,16 @@
             "time": -2100
         },
         {
+            "name": "SpaceX Stream Start",
+            "time": -2100
+        },
+        {
             "name": "Ship CH4 Load",
             "time": -2054
         },
         {
             "name": "Ship LOX Load",
             "time": -2053
-        },
-        {
-            "name": "SpaceX Stream Start",
-            "time": -2100
         },
         {
             "name": "Engine Chill",
@@ -49,8 +49,8 @@
             "time": -130
         },
         {
-            "name": "T-40 Seconds Hold",
-            "time": -40
+            "name": "T-60 Seconds Hold",
+            "time": -60
         },
         {
             "name": "FD Go for Launch",
