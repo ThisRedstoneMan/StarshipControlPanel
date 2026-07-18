@@ -177,6 +177,73 @@
       -webkit-overflow-scrolling: touch;
     }
     .tl-svg { display: block; }
+    .window-bar {
+      width: 100%;
+      max-width: 900px;
+      margin: 8px 0 12px;
+    }
+    .window-bar-track {
+      position: relative;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      overflow: hidden;
+    }
+    .window-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #58a6ff, #f85149);
+      transition: width 0.2s ease-out;
+    }
+    .window-bar-dot {
+      position: absolute;
+      top: 50%;
+      left: 0%;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #f85149;
+      border: 2px solid #fff;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 0 2px rgba(248, 81, 73, 0.25);
+    }
+    .window-bar-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+      font-size: 0.65rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--tl-label);
+    }
+    @keyframes windowBarAlert {
+      0%, 100% {
+        opacity: 1;
+        filter: saturate(1);
+      }
+      50% {
+        opacity: 0.25;
+        filter: saturate(0.3);
+      }
+    }
+    .window-bar.out-of-window {
+      animation: windowBarAlert 1s linear infinite;
+    }
+    .window-bar.out-of-window .window-bar-track {
+      background: rgba(248, 81, 73, 0.22);
+      border-color: rgba(248, 81, 73, 0.6);
+    }
+    .window-bar.out-of-window .window-bar-fill {
+      background: linear-gradient(90deg, #ff6b6b, #f85149);
+    }
+    .window-bar.out-of-window .window-bar-dot {
+      background: #ff3b30;
+      box-shadow: 0 0 0 2px rgba(248, 81, 73, 0.5);
+    }
+    .window-bar.out-of-window .window-bar-labels {
+      color: #f85149;
+    }
     .tl-next-label {
       margin-top: 8px;
       font-size: 0.8rem;
@@ -260,16 +327,16 @@
     <div class="status-box range-box" id="rangeBox">RANGE: GO</div>
     <div class="status-grid">
       <div class="status-box" id="padClearBox">PAD CLEAR: GO</div>
-      <div class="status-box" id="roadClosedBox">ROAD CLOSED: GO</div>
+      <div class="status-box" id="roadClosureCloseBox">ROAD CLOSURE CLOSE: GO</div>
+      <div class="status-box" id="roadClosureFarBox">ROAD CLOSURE FAR: GO</div>
       <div class="status-box" id="weatherBox">WEATHER: GO</div>
-      <div class="status-box" id="tankFarmBox">TANK FARM CHILLDOWN: GO</div>
     </div>
     <div class="status-sidebar-label">Vehicle &amp; Ground Systems</div>
     <div class="status-grid">
-      <div class="status-box" id="ftsArmedBox">FTS ARMED: GO</div>
-      <div class="status-box" id="delugeReadyBox">DELUGE READY: GO</div>
-      <div class="status-box" id="telemetryLinkBox">TELEMETRY LINK: GO</div>
+      <div class="status-box" id="tankFarmBox">TANK FARM CHILLDOWN: GO</div>
+      <div class="status-box" id="propLoadBox">GO FOR PROP LOAD: GO</div>
       <div class="status-box" id="flightDirectorBox">FLIGHT DIRECTOR: GO</div>
+      <div class="status-box" id="rangeBox">RANGE: GO</div>
     </div>
   </div>
 
@@ -288,6 +355,17 @@
     </div>
     <div class="fuel-track">
       <div class="fuel-fill" id="fuelFill"></div>
+    </div>
+  </div>
+
+  <div class="window-bar" id="windowBar" style="display:none;">
+    <div class="window-bar-track">
+      <div class="window-bar-fill" id="windowBarFill"></div>
+      <div class="window-bar-dot" id="windowBarDot"></div>
+    </div>
+    <div class="window-bar-labels">
+      <span>Window start</span>
+      <span>Window end</span>
     </div>
   </div>
 
@@ -339,23 +417,18 @@
       <div class="dbg-row">
         <button id="dbgHoldShort">+30s hold</button>
         <button id="dbgHoldLong">+5min hold</button>
-        <button id="dbgDelay">+2hr delay</button>
+        <button id="dbgDelay">+1hr delay</button>
         <button id="dbgClearSim">Clear simulation</button>
       </div>
       <div class="dbg-row">
         <button id="dbgToggleWeather">Toggle Weather</button>
         <button id="dbgTogglePadClear">Toggle Pad Clear</button>
+        <button id="dbgToggleRoadClosureClose">Toggle Road Closure Close</button>
+        <button id="dbgToggleRoadClosureFar">Toggle Road Closure Far</button>
       </div>
       <div class="dbg-row">
-        <button id="dbgToggleRoadClosed">Toggle Road Closed</button>
         <button id="dbgToggleTankFarm">Toggle Tank Farm Chilldown</button>
-      </div>
-      <div class="dbg-row">
-        <button id="dbgToggleFtsArmed">Toggle FTS Armed</button>
-        <button id="dbgToggleDelugeReady">Toggle Deluge Ready</button>
-      </div>
-      <div class="dbg-row">
-        <button id="dbgToggleTelemetryLink">Toggle Telemetry Link</button>
+        <button id="dbgTogglePropLoad">Toggle Go for Prop Load</button>
         <button id="dbgToggleFlightDirector">Toggle Flight Director</button>
       </div>
     </details>
@@ -478,27 +551,55 @@
       box.classList.toggle("no-go", !go);
     }
 
+    function updateWindowBar(state) {
+      const bar = document.getElementById("windowBar");
+      const fill = document.getElementById("windowBarFill");
+      const dot = document.getElementById("windowBarDot");
+      if (!bar || !fill || !dot) return;
+
+      const windowStart = state && state.launch_window ? state.launch_window.start : null;
+      const windowEnd = state && state.launch_window ? state.launch_window.end : null;
+      const launchTimestamp = state && state.launch_timestamp != null ? Number(state.launch_timestamp) : null;
+      if (windowStart == null || windowEnd == null || launchTimestamp == null) {
+        bar.style.display = "none";
+        return;
+      }
+
+      const safeStart = Math.min(Number(windowStart), Number(windowEnd));
+      const safeEnd = Math.max(Number(windowStart), Number(windowEnd));
+      const clampedTime = Math.min(safeEnd, Math.max(safeStart, launchTimestamp));
+      const span = safeEnd - safeStart;
+      const ratio = span > 0 ? (clampedTime - safeStart) / span : 0;
+      const pct = Math.max(0, Math.min(100, ratio * 100));
+      const isOutsideWindow = launchTimestamp < safeStart || launchTimestamp > safeEnd;
+
+      bar.style.display = "block";
+      bar.classList.toggle("out-of-window", isOutsideWindow);
+      fill.style.width = `${pct}%`;
+      dot.style.left = `${pct}%`;
+    }
+
     function updateStatusSidebar(state) {
       const weatherGo = !state.weather || state.weather.go !== false;
       const padClearGo = !state.pad_clear || state.pad_clear.go !== false;
-      const roadClosedGo = !state.road_closed || state.road_closed.go !== false;
+      const roadClosureCloseGo = !state.road_closure_close || state.road_closure_close.go !== false;
+      const roadClosureFarGo = !state.road_closure_far || state.road_closure_far.go !== false;
       const tankFarmGo = !state.tank_farm_chilldown || state.tank_farm_chilldown.go !== false;
-      const ftsArmedGo = !state.fts_armed || state.fts_armed.go !== false;
-      const delugeReadyGo = !state.deluge_ready || state.deluge_ready.go !== false;
-      const telemetryLinkGo = !state.telemetry_link || state.telemetry_link.go !== false;
-      const flightDirectorGo = !state.flight_director_go || state.flight_director_go.go !== false;
+      const propLoadGo = !state.go_for_prop_load || state.go_for_prop_load.go !== false;
+      const flightDirectorGo = (state.t_seconds != null && state.t_seconds >= -30)
+        ? true
+        : (!state.flight_director_go || state.flight_director_go.go !== false);
       // Prefer the server's computed Range value if present, but fall back
       // to computing it client-side so this still works against an older
       // server that hasn't added "range" to current_state yet.
-      const rangeGo = state.range ? state.range.go !== false : (weatherGo && padClearGo && roadClosedGo);
+      const rangeGo = state.range ? state.range.go !== false : (weatherGo && padClearGo && roadClosureCloseGo && roadClosureFarGo);
 
       updateStatusBox("weatherBox", "WEATHER", weatherGo);
       updateStatusBox("padClearBox", "PAD CLEAR", padClearGo);
-      updateStatusBox("roadClosedBox", "ROAD CLOSED", roadClosedGo);
+      updateStatusBox("roadClosureCloseBox", "ROAD CLOSURE CLOSE", roadClosureCloseGo);
+      updateStatusBox("roadClosureFarBox", "ROAD CLOSURE FAR", roadClosureFarGo);
       updateStatusBox("tankFarmBox", "TANK FARM CHILLDOWN", tankFarmGo);
-      updateStatusBox("ftsArmedBox", "FTS ARMED", ftsArmedGo);
-      updateStatusBox("delugeReadyBox", "DELUGE READY", delugeReadyGo);
-      updateStatusBox("telemetryLinkBox", "TELEMETRY LINK", telemetryLinkGo);
+      updateStatusBox("propLoadBox", "GO FOR PROP LOAD", propLoadGo);
       updateStatusBox("flightDirectorBox", "FLIGHT DIRECTOR", flightDirectorGo);
       updateStatusBox("rangeBox", "RANGE", rangeGo);
     }
@@ -513,7 +614,7 @@
 
     document.getElementById("dbgHoldShort").addEventListener("click", () => simulateShift(30));
     document.getElementById("dbgHoldLong").addEventListener("click", () => simulateShift(300));
-    document.getElementById("dbgDelay").addEventListener("click", () => simulateShift(7200));
+    document.getElementById("dbgDelay").addEventListener("click", () => simulateShift(3600));
     function wireToggleButton(buttonId, endpoint) {
       document.getElementById(buttonId).addEventListener("click", async () => {
         try {
@@ -528,11 +629,10 @@
 
     wireToggleButton("dbgToggleWeather", "/debug/toggle-weather");
     wireToggleButton("dbgTogglePadClear", "/debug/toggle-pad-clear");
-    wireToggleButton("dbgToggleRoadClosed", "/debug/toggle-road-closed");
+    wireToggleButton("dbgToggleRoadClosureClose", "/debug/toggle-road-closure-close");
+    wireToggleButton("dbgToggleRoadClosureFar", "/debug/toggle-road-closure-far");
     wireToggleButton("dbgToggleTankFarm", "/debug/toggle-tank-farm-chilldown");
-    wireToggleButton("dbgToggleFtsArmed", "/debug/toggle-fts-armed");
-    wireToggleButton("dbgToggleDelugeReady", "/debug/toggle-deluge-ready");
-    wireToggleButton("dbgToggleTelemetryLink", "/debug/toggle-telemetry-link");
+    wireToggleButton("dbgTogglePropLoad", "/debug/toggle-prop-load");
     wireToggleButton("dbgToggleFlightDirector", "/debug/toggle-flight-director-go");
     document.getElementById("dbgGradualHold").addEventListener("change", async (event) => {
       try {
@@ -707,6 +807,7 @@
           latestMilestones = Array.isArray(state.milestones)
             ? state.milestones
             : (state.milestones && state.milestones.CountdownMilestones) || [];
+          updateWindowBar(state);
           updateStatusSidebar(state);
         } else {
           document.getElementById("error").textContent = state.error;

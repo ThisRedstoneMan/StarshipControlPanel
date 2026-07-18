@@ -17,11 +17,10 @@ from main import (
     debug_advance_countdown,
     debug_toggle_weather,
     debug_toggle_pad_clear,
-    debug_toggle_road_closed,
+    debug_toggle_road_closure_close,
+    debug_toggle_road_closure_far,
     debug_toggle_tank_farm_chilldown,
-    debug_toggle_fts_armed,
-    debug_toggle_deluge_ready,
-    debug_toggle_telemetry_link,
+    debug_toggle_go_for_prop_load,
     debug_toggle_flight_director_go,
     debug_clear_override,
 )
@@ -93,25 +92,21 @@ async def debug_toggle_weather_route():
 async def debug_toggle_pad_clear_route():
     return debug_toggle_pad_clear()
 
-@app.post("/debug/toggle-road-closed")
-async def debug_toggle_road_closed_route():
-    return debug_toggle_road_closed()
+@app.post("/debug/toggle-road-closure-close")
+async def debug_toggle_road_closure_close_route():
+    return debug_toggle_road_closure_close()
+
+@app.post("/debug/toggle-road-closure-far")
+async def debug_toggle_road_closure_far_route():
+    return debug_toggle_road_closure_far()
 
 @app.post("/debug/toggle-tank-farm-chilldown")
 async def debug_toggle_tank_farm_chilldown_route():
     return debug_toggle_tank_farm_chilldown()
 
-@app.post("/debug/toggle-fts-armed")
-async def debug_toggle_fts_armed_route():
-    return debug_toggle_fts_armed()
-
-@app.post("/debug/toggle-deluge-ready")
-async def debug_toggle_deluge_ready_route():
-    return debug_toggle_deluge_ready()
-
-@app.post("/debug/toggle-telemetry-link")
-async def debug_toggle_telemetry_link_route():
-    return debug_toggle_telemetry_link()
+@app.post("/debug/toggle-prop-load")
+async def debug_toggle_prop_load_route():
+    return debug_toggle_go_for_prop_load()
 
 @app.post("/debug/toggle-flight-director-go")
 async def debug_toggle_flight_director_go_route():

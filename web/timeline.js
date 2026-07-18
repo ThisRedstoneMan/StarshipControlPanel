@@ -191,16 +191,30 @@ export function initTimeline(container) {
   }
 
   function update(state) {
-    if (!state || !state.milestones) return;
-    const list = Array.isArray(state.milestones)
-      ? state.milestones
-      : state.milestones.CountdownMilestones || [];
-    if (list.length === 0) return;
+    if (!state) return;
 
-    // Only rebuild the elastic scale if the milestone set actually changed
-    // (cheap identity check on length + first/last time is enough here).
-    if (!scale || scale.points.length !== list.length) {
-      scale = buildElasticScale(list);
+    let list = [];
+    if (Array.isArray(state.milestones)) {
+      list = state.milestones;
+    } else if (state.milestones && Array.isArray(state.milestones.CountdownMilestones)) {
+      list = state.milestones.CountdownMilestones;
+    } else if (state.milestones && Array.isArray(state.milestones.milestones)) {
+      list = state.milestones.milestones;
+    }
+
+    const normalized = list
+      .filter(Boolean)
+      .map((item) => ({
+        name: item.name || item.label || "Milestone",
+        time: Number(item.time ?? item.seconds ?? item.offset ?? 0),
+      }))
+      .filter((item) => Number.isFinite(item.time));
+
+    if (normalized.length === 0) return;
+
+    // Only rebuild the elastic scale if the milestone set actually changed.
+    if (!scale || scale.points.length !== normalized.length) {
+      scale = buildElasticScale(normalized);
     }
 
     latestState = state;

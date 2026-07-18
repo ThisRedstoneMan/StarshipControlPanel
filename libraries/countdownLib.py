@@ -55,6 +55,70 @@ def classify_timestamp_change(previous_ts, new_ts, hold_threshold=600):
     }
 
 
+def _parse_site_local_datetime(date_str, time_str):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    if not date_str or not time_str:
+        return None
+
+    launch_tz = ZoneInfo("America/Chicago")
+    try:
+        local_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        try:
+            local_dt = datetime.fromisoformat(f"{date_str}T{time_str}")
+        except ValueError:
+            return None
+
+    return local_dt.replace(tzinfo=launch_tz).timestamp()
+
+
+def getLaunchDetails(url, flightID):
+    """Fetch launch details including the launch window bounds from SpaceX's mission payload."""
+    import requests
+
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+        mission = next((m for m in data if m.get("correlationId") == flightID), None)
+        if mission is None:
+            raise ValueError(f"Flight ID {flightID} not found in the data.")
+
+        override = mission.get("override") or {}
+        launch_date = override.get("windowOpenDate") or mission.get("launchDate")
+        launch_time = override.get("windowOpenTime") or mission.get("launchTime")
+        launch_timestamp = None
+        if launch_date and launch_time:
+            launch_timestamp = _parse_site_local_datetime(launch_date, launch_time)
+
+        window_start = _parse_site_local_datetime(override.get("windowOpenDate"), override.get("windowOpenTime"))
+        window_end = _parse_site_local_datetime(override.get("windowCloseDate"), override.get("windowCloseTime"))
+
+        if launch_timestamp is None and window_start is not None:
+            launch_timestamp = window_start
+        if launch_timestamp is None and window_end is not None:
+            launch_timestamp = window_end
+
+        return {
+            "launch_timestamp": launch_timestamp,
+            "window_start": window_start,
+            "window_end": window_end,
+        }
+
+    except requests.RequestException as e:
+        print(f"Error fetching data from {url}: {e}")
+        return {"launch_timestamp": None, "window_start": None, "window_end": None}
+    except ValueError as ve:
+        print(ve)
+        return {"launch_timestamp": None, "window_start": None, "window_end": None}
+    except Exception as e:
+        print(f"Unexpected error parsing launch data: {e}")
+        return {"launch_timestamp": None, "window_start": None, "window_end": None}
+
+
 def getLaunchTimestamp(url, flightID):
     """
     Fetches the target launch time for a mission from SpaceX's
@@ -82,41 +146,8 @@ def getLaunchTimestamp(url, flightID):
     (Florida/California), update LAUNCH_SITE_TIMEZONE accordingly — the
     API does not appear to indicate per-mission timezone itself.
     """
-    import requests
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    LAUNCH_SITE_TIMEZONE = ZoneInfo("America/Chicago")  # Starbase, TX
-
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
-
-        mission = next((m for m in data if m.get("correlationId") == flightID), None)
-        if mission is None:
-            raise ValueError(f"Flight ID {flightID} not found in the data.")
-
-        override = mission.get("override") or {}
-        date_str = override.get("windowOpenDate") or mission.get("launchDate")
-        time_str = override.get("windowOpenTime") or mission.get("launchTime")
-
-        if not date_str or not time_str:
-            raise ValueError(f"No launch date/time available yet for Flight ID {flightID}.")
-
-        local_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
-        local_dt = local_dt.replace(tzinfo=LAUNCH_SITE_TIMEZONE)
-        return local_dt.timestamp()
-
-    except requests.RequestException as e:
-        print(f"Error fetching data from {url}: {e}")
-        return None
-    except ValueError as ve:
-        print(ve)
-        return None
-    except Exception as e:
-        print(f"Unexpected error parsing launch data: {e}")
-        return None
+    details = getLaunchDetails(url, flightID)
+    return details.get("launch_timestamp")
 
 
 def getSignedSeconds(launchTimeStamp):

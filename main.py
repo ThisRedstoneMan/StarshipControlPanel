@@ -3,6 +3,7 @@ import json
 import threading
 from pathlib import Path
 from libraries.countdownLib import (
+    getLaunchDetails,
     getLaunchTimestamp,
     getSignedSeconds,
     classify_timestamp_change,
@@ -49,7 +50,8 @@ def fetch_clock_async():
     real_previous_ts = None
 
     while running:
-        new_real_ts = getLaunchTimestamp(spacexCountdownUrl, flightID)
+        launch_details = getLaunchDetails(spacexCountdownUrl, flightID)
+        new_real_ts = launch_details.get("launch_timestamp")
 
         if new_real_ts is not None:
             # Only treat real API changes as hold/delay events while we're
@@ -68,6 +70,11 @@ def fetch_clock_async():
         if effective_ts is not None:
             launch_timestamp = effective_ts
             signed_seconds = getSignedSeconds(effective_ts)
+            current_state["launch_timestamp"] = effective_ts
+            current_state["launch_window"] = {
+                "start": launch_details.get("window_start"),
+                "end": launch_details.get("window_end"),
+            }
 
         time.sleep(fetchInterval)
 
@@ -86,6 +93,8 @@ current_state = {
     "t_seconds": 0,
     "phase": "pre-launch",
     "milestones": milestones_data,
+    "launch_timestamp": None,
+    "launch_window": {"start": None, "end": None},
     "server_time": time.time(),
     "telemetry": {},
     # Nominal until a poll detects the SpaceX target timestamp moving.
@@ -107,28 +116,27 @@ current_state = {
     # during development.
     "weather": {"go": True},
     "pad_clear": {"go": True},
-    "road_closed": {"go": True},
+    "road_closure_close": {"go": True},
+    "road_closure_far": {"go": True},
     "tank_farm_chilldown": {"go": True},
-    # More ground/vehicle status toggles — informational for now, not
-    # wired into the Range composite, but easy to add later if desired.
-    "fts_armed": {"go": True},
-    "deluge_ready": {"go": True},
-    "telemetry_link": {"go": True},
+    "go_for_prop_load": {"go": True},
     "flight_director_go": {"go": True},
-    # Derived: green only when weather, pad_clear, and road_closed are all
-    # green. Tank farm chilldown is tracked but doesn't gate Range.
+    # Derived: green only when weather, pad_clear, and both road-closure
+    # checks are all green. Tank farm chilldown and prop-load status are
+    # tracked but do not gate Range.
     "range": {"go": True},
 }
 
 
 def _update_range_status():
-    """Recomputes the Range composite from weather, pad_clear, and
-    road_closed (tank_farm_chilldown is informational only)."""
+    """Recomputes the Range composite from weather, pad_clear, and both
+    road-closure checks (tank_farm_chilldown is informational only)."""
     current_state["range"] = {
         "go": (
             current_state["weather"]["go"]
             and current_state["pad_clear"]["go"]
-            and current_state["road_closed"]["go"]
+            and current_state["road_closure_close"]["go"]
+            and current_state["road_closure_far"]["go"]
         )
     }
 
@@ -195,9 +203,14 @@ def debug_toggle_pad_clear():
     return _toggle_status("pad_clear")
 
 
-def debug_toggle_road_closed():
-    """Toggle the shared Road Closed GO/NO-GO state."""
-    return _toggle_status("road_closed")
+def debug_toggle_road_closure_close():
+    """Toggle the shared Road Closure Close GO/NO-GO state."""
+    return _toggle_status("road_closure_close")
+
+
+def debug_toggle_road_closure_far():
+    """Toggle the shared Road Closure Far GO/NO-GO state."""
+    return _toggle_status("road_closure_far")
 
 
 def debug_toggle_tank_farm_chilldown():
@@ -206,19 +219,9 @@ def debug_toggle_tank_farm_chilldown():
     return _toggle_status("tank_farm_chilldown")
 
 
-def debug_toggle_fts_armed():
-    """Toggle the shared Flight Termination System armed state."""
-    return _toggle_status("fts_armed")
-
-
-def debug_toggle_deluge_ready():
-    """Toggle the shared water deluge system readiness state."""
-    return _toggle_status("deluge_ready")
-
-
-def debug_toggle_telemetry_link():
-    """Toggle the shared ground telemetry/comms link state."""
-    return _toggle_status("telemetry_link")
+def debug_toggle_go_for_prop_load():
+    """Toggle the shared Go for Prop Load status."""
+    return _toggle_status("go_for_prop_load")
 
 
 def debug_toggle_flight_director_go():
@@ -362,6 +365,7 @@ def debug_set_time(signed_seconds):
     target_ts = time.time() - signed_seconds
     debug_override["active"] = True
     debug_override["launch_timestamp"] = target_ts
+    current_state["launch_timestamp"] = target_ts
 
     active_hold = None
     hold_fuel_remaining = HOLD_FUEL_BUDGET_SECONDS
@@ -389,6 +393,7 @@ def debug_advance_countdown(seconds):
     debug_override["launch_timestamp"] = new_timestamp
     launch_timestamp = new_timestamp
     signed_seconds = getSignedSeconds(new_timestamp)
+    current_state["launch_timestamp"] = new_timestamp
     return {"ok": True, "launch_timestamp": new_timestamp, "advanced_seconds": seconds}
 
 
@@ -400,6 +405,7 @@ def debug_clear_override():
     active_hold = None
     debug_override["active"] = False
     debug_override["launch_timestamp"] = None
+    current_state["launch_timestamp"] = None
     hold_fuel_remaining = HOLD_FUEL_BUDGET_SECONDS
     update_fuel_state()
     return {"ok": True}
@@ -442,9 +448,15 @@ def telemetry_update_loop():
     # Fetch the official T0 time once at startup
     global signed_seconds
     global launch_timestamp
-    launch_timestamp = getLaunchTimestamp(spacexCountdownUrl, flightID)
+    launch_details = getLaunchDetails(spacexCountdownUrl, flightID)
+    launch_timestamp = launch_details.get("launch_timestamp")
     if launch_timestamp is not None:
         signed_seconds = getSignedSeconds(launch_timestamp)
+        current_state["launch_timestamp"] = launch_timestamp
+        current_state["launch_window"] = {
+            "start": launch_details.get("window_start"),
+            "end": launch_details.get("window_end"),
+        }
     # If this first fetch fails, fetch_clock_async's own loop will pick
     # up a good timestamp shortly and signed_seconds will start updating.
 
