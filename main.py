@@ -40,7 +40,7 @@ gradual_hold = {"active": False, "thread": None}
 # around indefinitely). Real number pulled from your milestones.json.
 # ---------------------------------------------------------------------
 LOAD_COMPLETE_OFFSET = -130   # T-2:10, "Ship Load Complete" milestone
-HOLD_FUEL_BUDGET_SECONDS = 15 * 60  # 15 minutes
+HOLD_FUEL_BUDGET_SECONDS = 10 * 60  # 10 minutes
 
 hold_fuel_remaining = HOLD_FUEL_BUDGET_SECONDS
 

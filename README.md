@@ -28,7 +28,7 @@ python -m pip install fastapi "uvicorn[standard]" requests
 From the repository root, start the app with either of these commands:
 
 ```bash
-python launcher.py
+python launcher.py (recommanded)
 ```
 
 or:
@@ -51,7 +51,7 @@ http://YOUR-COMPUTER-LAN-IP:8000
 
 If the browser cannot connect, allow Python through your firewall for private networks.
 
-Stop the server with `Ctrl+C`.
+Stop the server with q and reboot it with enter (ONLY WORKS IF LAUNCHED WITH LAUNCHER.PY).
 
 ## Project structure
 
@@ -107,7 +107,7 @@ The hold-fuel budget and prop-load milestone offsets are also defined in [main.p
 
 ```python
 LOAD_COMPLETE_OFFSET = -130
-HOLD_FUEL_BUDGET_SECONDS = 15 * 60
+HOLD_FUEL_BUDGET_SECONDS = 10 * 60
 ```
 
 ## Milestones
@@ -137,7 +137,7 @@ Positive changes push T-0 later; negative changes move it earlier. Consecutive s
 
 ## Hold-fuel budget
 
-The dashboard uses the configured milestone in [data/milestones.json](data/milestones.json) to define the prop-load-complete point at T-2:10. From that point onward, a 15-minute hold-fuel allowance is visualized.
+The dashboard uses the configured milestone in [data/milestones.json](data/milestones.json) to define the prop-load-complete point at T-2:10. From that point onward, a 10-minute hold-fuel allowance is visualized.
 
 - The bar is inactive before the load-complete milestone.
 - After that, the budget turns green, amber, or red depending on how much remains.
@@ -152,7 +152,7 @@ Enable Debug tools in the top-left of the dashboard to reveal the local testing 
 - Manual time override previews a timeline point in the browser only.
 - Jump countdown here commits the selected time to the server and resets the hold-fuel budget.
 - Advance countdown moves the server-side countdown forward without resetting the hold-fuel budget.
-- +30s hold, +5min hold, and +1hr delay simulate T-0 shifts through the real detection pipeline.
+- +30s delay, +5min delay, and +1hr delay simulate T-0 shifts through the real detection pipeline.
 - Continuous hold advances T-0 by one second per real second.
 - Toggle Weather, Pad Clear, Road Closure Close, Road Closure Far, Tank Farm Chilldown, Go for Prop Load, and Flight Director change the shared status indicators for every connected browser.
 - Clear simulation restores the live countdown state.
@@ -187,6 +187,7 @@ The debug routes are intentionally local-only and should not be exposed to the p
 
 ## Thanks
 
-- Thanks to NextSpaceFlight for the milestone inspiration
-- Thanks to NSF for the live launch coverage and community discussion
+- Thanks to NextSpaceFlight for the easy to copy milestones
+- Thanks to NASASpacefslight for the live launch coverage and community discussion
+- Thanks Jay (from NSF) for some questions
 - Thanks to SpaceX for making countdown information visible on the internet
