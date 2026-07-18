@@ -1,25 +1,23 @@
 # Starship Control Panel
 
-A lightweight, real-time Starship launch dashboard for a browser on your computer or local network. It follows the configured SpaceX mission countdown, displays a mission timeline, detects T-0 changes, and tracks the post-load hold-fuel budget.
+A lightweight, real-time Starship launch dashboard for a browser on your computer or local network. It polls the SpaceX launch-data feed, renders a mission timeline, tracks countdown state, and broadcasts live status updates to every connected browser over WebSockets.
 
-## Features
+## What the app does
 
-- Live `T-` / `T+` clock, phase, and milestone timeline.
-- Responsive browser interface that works for everyone connected to the same network.
-- Elastic timeline spacing: dense launch events remain readable without wasting space on long coast phases.
-- Automatic comparison of consecutive T-0 timestamps to identify holds, resumed countdowns, delays, and earlier launch times.
-- Consecutive small T-0 slips are grouped into one growing hold event instead of flooding the event history.
-- Post-load hold-fuel bar: after Ship Load Complete at T-2:10, a 15-minute hold budget is tracked and displayed.
-- Shared weather GO/NO-GO indicator, visible to every connected client.
-- Debug controls for timeline scrubbing, server-side time jumps, simulated holds/delays, and a continuous one-second-per-second hold.
+- Shows a live T-/T+ countdown clock, phase, and latest milestone.
+- Renders a mission timeline with an animated marker that moves smoothly between updates.
+- Displays a visible launch-window bar with a red dot and a flashing red state when the current launch time falls outside the active window.
+- Detects countdown holds, resumed countdowns, delays, and other timestamp changes from the upstream SpaceX data.
+- Tracks a post-load hold-fuel budget after the configured load-complete milestone.
+- Exposes shared status indicators for weather, pad clear, road closure close, road closure far, tank farm chilldown, go for prop load, and flight director. The flight director status automatically goes to GO when the countdown is under 30 seconds.
+- Includes local debug controls for time scrubbing, server-side countdown jumps, simulated holds/delays, and status toggles.
 
 ## Requirements
 
-- Python 3.10 or later
-- Internet access to retrieve the configured SpaceX mission record
+- Python 3.10 or newer
+- Internet access so the app can fetch the SpaceX launch-data feed
 - A modern browser
-
-Install the Python dependencies:
+- The following Python packages:
 
 ```bash
 python -m pip install fastapi "uvicorn[standard]" requests
@@ -27,23 +25,50 @@ python -m pip install fastapi "uvicorn[standard]" requests
 
 ## Run locally
 
-From the repository root:
+From the repository root, start the app with either of these commands:
+
+```bash
+python launcher.py
+```
+
+or:
 
 ```bash
 python server.py
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in a browser.
+Then open:
 
-The server listens on `0.0.0.0`, so another device on the same network can use:
+```text
+http://127.0.0.1:8000
+```
+
+The server listens on `0.0.0.0`, so devices on the same local network can also open it using your computer's LAN IP address, for example:
 
 ```text
 http://YOUR-COMPUTER-LAN-IP:8000
 ```
 
-For example, a phone might open `http://192.168.1.82:8000`. If the connection fails, allow Python through your firewall for private networks.
+If the browser cannot connect, allow Python through your firewall for private networks.
 
 Stop the server with `Ctrl+C`.
+
+## Project structure
+
+```text
+.
++-- data/
+|   +-- milestones.json       # Timeline milestones relative to T-0
++-- libraries/
+|   +-- countdownLib.py       # SpaceX data parsing, timestamp helpers, countdown formatting
+|   +-- generalLib.py         # Small cross-platform utility helper
++-- web/
+|   +-- index.html            # Dashboard UI, status boxes, window bar, debug tools
+|   +-- timeline.js           # SVG-based elastic timeline renderer
++-- launcher.py               # Helper that restarts server.py in a loop
++-- main.py                   # Countdown logic, hold/delay detection, shared state
++-- server.py                 # FastAPI app, static file serving, WebSocket broadcast
+```
 
 ## How it works
 
@@ -51,7 +76,7 @@ Stop the server with `Ctrl+C`.
 SpaceX mission data
         |
         v
-main.py: fetch T-0, calculate live clock, detect timestamp changes
+main.py: fetch launch details, compute countdown, detect timestamp changes
         |
         v
 shared current_state dictionary
@@ -60,49 +85,34 @@ shared current_state dictionary
 server.py: FastAPI + WebSocket broadcast every 0.5 seconds
         |
         v
-web/index.html + web/timeline.js: dashboard and timeline
+web/index.html + web/timeline.js: browser dashboard and timeline
 ```
 
-`main.py` polls the configured SpaceX future-missions endpoint. Its Unix timestamp is compared against the current UTC time, so the countdown remains timezone-independent. The web server broadcasts the shared state over `/ws/state`; the browser smoothly estimates the time between messages for an animated marker.
-
-## Hold and delay detection
-
-Each successful poll compares the new T-0 timestamp with the previous one.
-
-| T-0 change | Result |
-| --- | --- |
-| No change | No event |
-| Change of 10 minutes or less | Hold / resumed countdown |
-| Change greater than 10 minutes | Delay / major schedule move |
-
-Positive changes move T-0 later; negative changes move it earlier. If a provider expresses a hold as a stream of small changes, the app updates one active hold entry with its accumulated duration.
-
-## Hold-fuel budget
-
-`data/milestones.json` places **Ship Load Complete** at T-2:10. From that point, the dashboard treats the vehicle as having a 15-minute hold-fuel allowance.
-
-- A positive detected hold after load completion deducts from the remaining allowance.
-- The bar is grey before T-2:10, then green, amber, or red as the remaining budget falls.
-- Returning to before load completion or receiving a major delay resets the budget, representing a new propellant-loading attempt.
-
-This is a visualization model for the dashboard, not an official operational rule or live vehicle telemetry.
+The app polls the configured SpaceX launch tiles endpoint, computes the signed countdown from the target launch timestamp, and passes the live state to the browser over `/ws/state`.
 
 ## Configuration
 
-Edit the values near the top of `main.py` to follow another mission or tune polling:
+The main mission settings are defined near the top of [main.py](main.py):
 
 ```python
-spacexCountdownUrl = "https://content.spacex.com/cms-assets/future_missions.json"
+spacexCountdownUrl = "https://content.spacex.com/api/spacex-website/launches-page-tiles/upcoming"
 flightID = "F343A80AAFA11416DBEA660C9ADB5728982363A1DB46756A4C4C86849048088B"
 fetchInterval = 0.5
 updateInterval = 0.1
 ```
 
-`flightID` must be a key present in the mission-data response. The countdown uses the record's `PrimaryLaunchDate.Seconds` field.
+You can change the mission ID or polling rate there if needed.
 
-### Milestones
+The hold-fuel budget and prop-load milestone offsets are also defined in [main.py](main.py):
 
-Edit [data/milestones.json](data/milestones.json) to change the displayed timeline. Each item has a label and a signed offset in seconds relative to T-0:
+```python
+LOAD_COMPLETE_OFFSET = -130
+HOLD_FUEL_BUDGET_SECONDS = 15 * 60
+```
+
+## Milestones
+
+The timeline milestones come from [data/milestones.json](data/milestones.json). Each item should look like this:
 
 ```json
 {
@@ -111,21 +121,43 @@ Edit [data/milestones.json](data/milestones.json) to change the displayed timeli
 }
 ```
 
-Negative values are before launch; positive values are after launch. Keep entries in chronological order for the clearest timeline.
+Use negative values for events before launch and positive values for events after launch. Keep the list in chronological order for the clearest timeline.
+
+## Hold and delay detection
+
+Each successful poll compares the new launch timestamp with the previous one.
+
+| Change detected | Result |
+| --- | --- |
+| No meaningful change | No event |
+| Small change | Hold / resumed countdown |
+| Larger change | Delay / major schedule move |
+
+Positive changes push T-0 later; negative changes move it earlier. Consecutive small slips are grouped into one active hold event so the banner and history remain readable.
+
+## Hold-fuel budget
+
+The dashboard uses the configured milestone in [data/milestones.json](data/milestones.json) to define the prop-load-complete point at T-2:10. From that point onward, a 15-minute hold-fuel allowance is visualized.
+
+- The bar is inactive before the load-complete milestone.
+- After that, the budget turns green, amber, or red depending on how much remains.
+- A major delay or a return to before the load-complete milestone resets the budget for a new attempt.
+
+This is a visualization aid for the dashboard, not official launch-provider telemetry.
 
 ## Debug tools
 
-Enable **Debug tools** in the top-right of the dashboard to reveal local testing controls.
+Enable Debug tools in the top-left of the dashboard to reveal the local testing controls.
 
-- **Manual time override** previews a timeline time in the browser only.
-- **Jump countdown here** commits the selected time to the server and resets the hold-fuel budget.
-- **Advance countdown** moves the server-side debug clock forward by the entered number of seconds without resetting the hold-fuel budget.
-- **+30s hold**, **+5min hold**, and **+2hr delay** run simulated T-0 changes through the normal detector.
-- **Continuous hold** advances T-0 by one second per real second, useful for testing the merged hold event and fuel bar.
-- **Toggle weather GO / NO-GO** changes the shared weather indicator for every connected browser.
-- **Clear simulation** restores live mission data and resets test state.
+- Manual time override previews a timeline point in the browser only.
+- Jump countdown here commits the selected time to the server and resets the hold-fuel budget.
+- Advance countdown moves the server-side countdown forward without resetting the hold-fuel budget.
+- +30s hold, +5min hold, and +1hr delay simulate T-0 shifts through the real detection pipeline.
+- Continuous hold advances T-0 by one second per real second.
+- Toggle Weather, Pad Clear, Road Closure Close, Road Closure Far, Tank Farm Chilldown, Go for Prop Load, and Flight Director change the shared status indicators for every connected browser.
+- Clear simulation restores the live countdown state.
 
-The debug routes have no authentication. Keep this server on a trusted local network; do not expose it directly to the public internet.
+The debug routes are intentionally local-only and should not be exposed to the public internet.
 
 ## HTTP and WebSocket endpoints
 
@@ -133,39 +165,28 @@ The debug routes have no authentication. Keep this server on a trusted local net
 | --- | --- |
 | `GET /` | Dashboard HTML and static assets |
 | `WS /ws/state` | Live dashboard state |
+| `POST /debug/simulate?delta_seconds=...` | Simulate a T-0 hold or delay |
 | `POST /debug/set-time?signed_seconds=...` | Set a server-side debug countdown time |
-| `POST /debug/advance?seconds=...` | Advance the server-side debug countdown |
-| `POST /debug/toggle-weather` | Toggle the shared weather GO/NO-GO state |
-| `POST /debug/simulate?delta_seconds=...` | Simulate a T-0 change |
-| `POST /debug/gradual-hold?enabled=true` | Start/stop the continuous hold simulation |
+| `POST /debug/advance?seconds=...` | Advance the server-side countdown |
+| `POST /debug/toggle-weather` | Toggle the shared weather status |
+| `POST /debug/toggle-pad-clear` | Toggle the shared pad-clear status |
+| `POST /debug/toggle-road-closure-close` | Toggle the road-closure-close status |
+| `POST /debug/toggle-road-closure-far` | Toggle the road-closure-far status |
+| `POST /debug/toggle-tank-farm-chilldown` | Toggle the tank-farm-chilldown status |
+| `POST /debug/toggle-prop-load` | Toggle the go-for-prop-load status |
+| `POST /debug/toggle-flight-director-go` | Toggle the flight-director GO status |
+| `POST /debug/gradual-hold?enabled=true` | Start or stop the continuous hold simulation |
 | `POST /debug/clear` | Clear the debug override |
 
-## Project structure
+## Notes and limitations
 
-```text
-.
-+-- data/
-|   +-- milestones.json       # Timeline events relative to T-0
-+-- libraries/
-|   +-- countdownLib.py       # Data fetching, timestamp and event helpers
-|   +-- generalLib.py         # Cross-platform beep helper
-+-- web/
-|   +-- index.html            # Dashboard UI and debug controls
-|   +-- timeline.js           # SVG elastic timeline renderer
-+-- main.py                   # Countdown state, polling, hold/fuel logic
-+-- server.py                 # FastAPI app, static files, WebSocket broadcast
-```
-
-## Limitations
-
-- Countdown accuracy depends entirely on the SpaceX data endpoint and the selected mission record.
-- A launch window or target may change without notice, and the endpoint may temporarily contain stale or incomplete data.
-- Hold and fuel-budget behavior is an inference/visualization, not confirmed launch-provider telemetry.
-- Debug controls are intentionally available for development and should be protected or removed before any public deployment.
+- Countdown accuracy depends on the SpaceX data endpoint and the selected mission record.
+- Launch timelines and windows can change without notice.
+- Hold and fuel-budget behavior are visualization aids based on the available data, not official provider telemetry.
+- The debug controls are intended for local development and testing.
 
 ## Thanks
 
- - Thanks NextSpaceFlight for the milestones
- - Thanks NSF for the awesome streams
- - Thanks Jay (from NSF) for some questions
- - Thanks SpaceX for putting the clock visible on the internet
+- Thanks to NextSpaceFlight for the milestone inspiration
+- Thanks to NSF for the live launch coverage and community discussion
+- Thanks to SpaceX for making countdown information visible on the internet
