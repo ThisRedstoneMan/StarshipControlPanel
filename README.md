@@ -51,7 +51,21 @@ http://YOUR-COMPUTER-LAN-IP:8000
 
 If the browser cannot connect, allow Python through your firewall for private networks.
 
-Stop the server with q and reboot it with enter (ONLY WORKS IF LAUNCHED WITH LAUNCHER.PY).
+Stop the server with q and reboot it with enter (ONLY WORKS IF LAUNCHED WITH launcher.py).
+
+## Change the debug password
+
+You can change the password in the server.py
+Change the "coolPassword" in this example with the actual password you want to use. 
+
+```
+DEBUG_PASSWORD = os.environ.get("STARSHIP_DEBUG_PASSWORD", "coolPassword")
+if DEBUG_PASSWORD == "coolPassword":
+    print(
+        "[debug-auth] WARNING: using the default debug password. "
+        "Set STARSHIP_DEBUG_PASSWORD to something private before sharing this on your LAN."
+    )
+```
 
 ## Project structure
 
