@@ -9,6 +9,7 @@ from libraries.countdownLib import (
     classify_timestamp_change,
     format_duration,
 )
+from libraries.generalLib import trigger_system_beep
 
 spacexCountdownUrl = "https://content.spacex.com/api/spacex-website/launches-page-tiles/upcoming"
 flightID = "F343A80AAFA11416DBEA660C9ADB5728982363A1DB46756A4C4C86849048088B"
@@ -32,6 +33,7 @@ debug_override = {"active": False, "launch_timestamp": None}
 # A hold that is reported as a series of small T-0 slips is represented as
 # one event, whose duration grows until the timestamp stops moving.
 active_hold = None
+last_active_hold = active_hold
 gradual_hold = {"active": False, "thread": None}
 
 # ---------------------------------------------------------------------
@@ -461,9 +463,19 @@ def telemetry_update_loop():
     # up a good timestamp shortly and signed_seconds will start updating.
 
     while True:
+        global active_hold, last_active_hold
         if signed_seconds is not None:
             calculate_and_update_state(signed_seconds)
-            
+        
+        if active_hold != last_active_hold:
+            if last_active_hold == None:
+                trigger_system_beep(800, 200)
+            else:
+                trigger_system_beep(2000, 200)
+                trigger_system_beep(2000, 200)
+            last_active_hold = active_hold
+        else:
+            last_active_hold = active_hold          
         
         
         time.sleep(updateInterval)

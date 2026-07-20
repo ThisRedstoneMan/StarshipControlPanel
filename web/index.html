@@ -440,8 +440,43 @@
     const timeline = initTimeline(document.getElementById("timeline"));
 
     // ---- Debug tools visibility toggle ---------------------------------
-    document.getElementById("showDebugTools").addEventListener("change", (e) => {
-      document.getElementById("debugTools").classList.toggle("visible", e.target.checked);
+    // Clicking this checkbox no longer just reveals the panel — it first
+    // has to authenticate with the server. A correct password puts this
+    // device's IP on the server's in-RAM whitelist, which every /debug/*
+    // route now requires. Unchecking never needs a password; it just hides
+    // the panel (it does not remove the device from the whitelist).
+    document.getElementById("showDebugTools").addEventListener("change", async (e) => {
+      const checkbox = e.target;
+      const debugToolsEl = document.getElementById("debugTools");
+
+      if (!checkbox.checked) {
+        debugToolsEl.classList.remove("visible");
+        return;
+      }
+
+      // Don't reveal anything until the server confirms the password.
+      checkbox.checked = false;
+
+      const password = window.prompt("Enter the debug password:");
+      if (password === null) return; // user hit cancel
+
+      try {
+        const response = await fetch("/debug/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+        const result = await response.json().catch(() => ({}));
+
+        if (response.ok && result.ok) {
+          checkbox.checked = true;
+          debugToolsEl.classList.add("visible");
+        } else {
+          alert(result.detail || "Incorrect password.");
+        }
+      } catch (err) {
+        alert("Could not reach the server to verify the password.");
+      }
     });
 
     // ---- Debug panel wiring -------------------------------------------
