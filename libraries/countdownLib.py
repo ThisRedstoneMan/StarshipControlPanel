@@ -1,3 +1,11 @@
+launch_site_timezones = {
+    "Pad 1, Starbase": "America/Chicago",
+    "Pad 2, Starbase": "America/Chicago",
+    "SLC-40, Florida": "America/New_York",
+    "LC-39A, Florida": "America/New_York",
+    "SLC-4E, California": "America/Los_Angeles",
+}
+
 def format_seconds_to_clock(signed_seconds):
         prefix = "T- " if signed_seconds < 0 else "T+ "
         abs_secs = abs(signed_seconds)
@@ -55,19 +63,23 @@ def classify_timestamp_change(previous_ts, new_ts, hold_threshold=600):
     }
 
 
-def _parse_site_local_datetime(date_str, time_str):
+def _parse_site_local_datetime(date_str, time_strn, launch_site):
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
-    if not date_str or not time_str:
+    if not date_str or not time_strn:
         return None
 
-    launch_tz = ZoneInfo("America/Chicago")
+    tz_name = launch_site_timezones.get(launch_site)
+    if not tz_name:
+        return None
+
+    launch_tz = ZoneInfo(tz_name)
     try:
-        local_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
+        local_dt = datetime.strptime(f"{date_str} {time_strn}", "%Y-%m-%d %H:%M:%S")
     except ValueError:
         try:
-            local_dt = datetime.fromisoformat(f"{date_str}T{time_str}")
+            local_dt = datetime.fromisoformat(f"{date_str}T{time_strn}")
         except ValueError:
             return None
 
@@ -92,10 +104,10 @@ def getLaunchDetails(url, flightID):
         launch_time = override.get("windowOpenTime") or mission.get("launchTime")
         launch_timestamp = None
         if launch_date and launch_time:
-            launch_timestamp = _parse_site_local_datetime(launch_date, launch_time)
+            launch_timestamp = _parse_site_local_datetime(launch_date, launch_time, mission.get("launchSite"))
 
-        window_start = _parse_site_local_datetime(override.get("windowOpenDate"), override.get("windowOpenTime"))
-        window_end = _parse_site_local_datetime(override.get("windowCloseDate"), override.get("windowCloseTime"))
+        window_start = _parse_site_local_datetime(override.get("windowOpenDate"), override.get("windowOpenTime"), mission.get("launchSite"))
+        window_end = _parse_site_local_datetime(override.get("windowCloseDate"), override.get("windowCloseTime"), mission.get("launchSite"))
 
         if launch_timestamp is None and window_start is not None:
             launch_timestamp = window_start

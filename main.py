@@ -10,15 +10,18 @@ from libraries.countdownLib import (
     format_duration,
 )
 from libraries.generalLib import trigger_system_beep
+from libraries.weatherLib import fetch_weather_probability
 
 spacexCountdownUrl = "https://content.spacex.com/api/spacex-website/launches-page-tiles/upcoming"
 flightID = "F343A80AAFA11416DBEA660C9ADB5728982363A1DB46756A4C4C86849048088B"
 fetchInterval = 0.5  # in seconds
+weatherFetchInterval = 600  # StageSep reassesses every 10 minutes
 updateInterval = 0.1  # in seconds
 signed_seconds = 0
 launch_timestamp = 0
 running = True
 MILESTONES_PATH = Path("./data/milestones.json")
+MANUAL_COUNTDOWN_PATH = Path("./data/manual_countdown_timestamp.txt")
 
 # How many past hold/delay events to keep for display (most recent first).
 MAX_EVENT_HISTORY = 10
@@ -50,12 +53,23 @@ hold_fuel_remaining = HOLD_FUEL_BUDGET_SECONDS
 def fetch_clock_async():
     global signed_seconds, launch_timestamp
     real_previous_ts = None
+    next_weather_fetch = 0
+    manual_countdown_timestamp = None
+    countdown_result_missing = False
 
     while running:
         launch_details = getLaunchDetails(spacexCountdownUrl, flightID)
         new_real_ts = launch_details.get("launch_timestamp")
 
         if new_real_ts is not None:
+            if countdown_result_missing:
+                print("SpaceX countdown result recovered.", flush=True)
+                countdown_result_missing = False
+            manual_countdown_timestamp = None
+            try:
+                MANUAL_COUNTDOWN_PATH.unlink()
+            except FileNotFoundError:
+                pass
             # Only treat real API changes as hold/delay events while we're
             # NOT in the middle of a debug simulation, so a test doesn't
             # get immediately overwritten/confused by a real poll.
@@ -63,11 +77,43 @@ def fetch_clock_async():
                 event = classify_timestamp_change(real_previous_ts, new_real_ts)
                 handle_timestamp_event(event)
             real_previous_ts = new_real_ts
+        else:
+            if not countdown_result_missing:
+                print(
+                    f"SpaceX countdown result is null from {spacexCountdownUrl}",
+                    flush=True,
+                )
+                countdown_result_missing = True
+            if manual_countdown_timestamp is None and MANUAL_COUNTDOWN_PATH.exists():
+                try:
+                    manual_countdown_timestamp = float(
+                        MANUAL_COUNTDOWN_PATH.read_text(encoding="ascii").strip()
+                    )
+                    print(
+                        f"Using temporary countdown timestamp: "
+                        f"{manual_countdown_timestamp}",
+                        flush=True,
+                    )
+                except (OSError, ValueError):
+                    print("Unable to read the temporary countdown timestamp.", flush=True)
 
         if debug_override["active"]:
             effective_ts = debug_override["launch_timestamp"]
+            current_state["countdown_source"] = "temporary"
         else:
-            effective_ts = new_real_ts if new_real_ts is not None else real_previous_ts
+            effective_ts = (
+                new_real_ts
+                if new_real_ts is not None
+                else manual_countdown_timestamp or real_previous_ts
+            )
+            if new_real_ts is not None:
+                current_state["countdown_source"] = "spacex"
+            elif manual_countdown_timestamp is not None:
+                current_state["countdown_source"] = "temporary"
+            elif real_previous_ts is not None:
+                current_state["countdown_source"] = "cached"
+            else:
+                current_state["countdown_source"] = "waiting"
 
         if effective_ts is not None:
             launch_timestamp = effective_ts
@@ -77,6 +123,16 @@ def fetch_clock_async():
                 "start": launch_details.get("window_start"),
                 "end": launch_details.get("window_end"),
             }
+
+        now = time.time()
+        if now >= next_weather_fetch:
+            try:
+                current_state["weather"].update(fetch_weather_probability())
+                current_state["weather"]["updated_at"] = now
+                current_state["weather"]["error"] = None
+            except (OSError, ValueError, json.JSONDecodeError) as error:
+                current_state["weather"]["error"] = str(error)
+            next_weather_fetch = now + weatherFetchInterval
 
         time.sleep(fetchInterval)
 
@@ -97,6 +153,7 @@ current_state = {
     "milestones": milestones_data,
     "launch_timestamp": None,
     "launch_window": {"start": None, "end": None},
+    "countdown_source": "waiting",
     "server_time": time.time(),
     "telemetry": {},
     # Nominal until a poll detects the SpaceX target timestamp moving.
@@ -116,7 +173,13 @@ current_state = {
     # Manual shared status toggles. A future weather/range-ops data source
     # can update these same values; the debug routes below are useful
     # during development.
-    "weather": {"go": True},
+    "weather": {
+        "go": True,
+        "overall_go_percent": None,
+        "window_open_percent": None,
+        "updated_at": None,
+        "error": None,
+    },
     "pad_clear": {"go": True},
     "road_closure_close": {"go": True},
     "road_closure_far": {"go": True},

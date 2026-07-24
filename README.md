@@ -205,3 +205,4 @@ The debug routes are intentionally local-only and should not be exposed to the p
 - Thanks to NASASpacefslight for the live launch coverage and community discussion
 - Thanks Jay (from NSF) for some questions
 - Thanks to SpaceX for making countdown information visible on the internet
+- Thanks for stagesep.com for the weather model

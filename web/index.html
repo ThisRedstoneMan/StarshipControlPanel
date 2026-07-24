@@ -29,6 +29,15 @@
     }
     .status { font-size: 0.75rem; color: #3fb950; margin-bottom: 32px; }
     .status.offline { color: #f85149; }
+    .data-source {
+      font-size: 0.65rem;
+      color: #3fb950;
+      letter-spacing: 1px;
+      margin-top: -24px;
+      margin-bottom: 8px;
+    }
+    .data-source.local { color: #d29922; }
+    .data-source.waiting { color: #f85149; }
     .clock { font-size: 3rem; font-weight: bold; letter-spacing: 2px; margin-bottom: 8px; }
     .phase { font-size: 1rem; color: #58a6ff; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 40px; }
     .last-milestone {
@@ -331,6 +340,7 @@
       <div class="status-box" id="roadClosureFarBox">ROAD CLOSURE FAR: GO</div>
       <div class="status-box" id="weatherBox">WEATHER: GO</div>
     </div>
+    <div class="status-sidebar-label" id="weatherProbability">WEATHER GO: --% · WINDOW OPEN: --%</div>
     <div class="status-sidebar-label">Vehicle &amp; Ground Systems</div>
     <div class="status-grid">
       <div class="status-box" id="tankFarmBox">TANK FARM CHILLDOWN: GO</div>
@@ -342,6 +352,7 @@
 
   <h1>Starship Control Panel</h1>
   <div class="status offline" id="status">connecting...</div>
+  <div class="data-source waiting" id="dataSource">WAITING FOR SPACEX</div>
   <div class="countdown-banner" id="countdownBanner"></div>
   <div class="clock" id="clock">T- 00:00:00</div>
   <div class="phase" id="phase">--</div>
@@ -630,6 +641,14 @@
       const rangeGo = state.range ? state.range.go !== false : (weatherGo && padClearGo && roadClosureCloseGo && roadClosureFarGo);
 
       updateStatusBox("weatherBox", "WEATHER", weatherGo);
+      const weatherProbability = document.getElementById("weatherProbability");
+      const overallGo = state.weather && state.weather.overall_go_percent;
+      const windowOpenGo = state.weather && state.weather.window_open_percent;
+      if (weatherProbability) {
+        const overallText = Number.isFinite(Number(overallGo)) ? `${Number(overallGo)}%` : "--%";
+        const windowOpenText = Number.isFinite(Number(windowOpenGo)) ? `${Number(windowOpenGo)}%` : "--%";
+        weatherProbability.textContent = `WEATHER GO: ${overallText} · WINDOW OPEN: ${windowOpenText}`;
+      }
       updateStatusBox("padClearBox", "PAD CLEAR", padClearGo);
       updateStatusBox("roadClosureCloseBox", "ROAD CLOSURE CLOSE", roadClosureCloseGo);
       updateStatusBox("roadClosureFarBox", "ROAD CLOSURE FAR", roadClosureFarGo);
@@ -833,6 +852,17 @@
       ws.onmessage = (event) => {
         const state = JSON.parse(event.data);
         if (state.ok) {
+          const dataSource = document.getElementById("dataSource");
+          const sourceLabels = {
+            spacex: "CONNECTED TO SPACEX",
+            temporary: "USING TEMPORARY MANUAL TIME",
+            cached: "USING CACHED SPACEX TIME",
+            waiting: "WAITING FOR SPACEX",
+          };
+          const source = state.countdown_source || "waiting";
+          dataSource.textContent = sourceLabels[source] || "WAITING FOR SPACEX";
+          dataSource.classList.toggle("local", source === "temporary" || source === "cached");
+          dataSource.classList.toggle("waiting", source === "waiting");
           document.getElementById("clock").textContent = state.clock;
           document.getElementById("phase").textContent = state.phase;
           document.getElementById("error").textContent = "";

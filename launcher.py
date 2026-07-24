@@ -2,33 +2,48 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 restart = threading.Event()
 shutdown = threading.Event()
+MANUAL_COUNTDOWN_PATH = Path("data/manual_countdown_timestamp.txt")
 
 def console_listener():
     while True:
-        cmd = input().strip().lower()
+        cmd = input().strip()
 
         if cmd == "":
             restart.set()
 
-        elif cmd == "q":
+        elif cmd.lower() == "q":
             confirm = input("Shutdown server? (y/n): ").strip().lower()
 
             if confirm in ("y", "yes"):
                 shutdown.set()
                 return
             else:
-                print("Shutdown cancelled")
+                print("Shutdown cancelled", flush=True)
+
+        else:
+            try:
+                float(cmd)
+            except ValueError:
+                print(
+                    "Enter a Unix timestamp, press Enter to restart, or type q to quit.",
+                    flush=True,
+                )
+            else:
+                MANUAL_COUNTDOWN_PATH.parent.mkdir(parents=True, exist_ok=True)
+                MANUAL_COUNTDOWN_PATH.write_text(cmd, encoding="ascii")
+                print(f"Temporary countdown timestamp set to {cmd}", flush=True)
 
 threading.Thread(target=console_listener, daemon=True).start()
 
 while True:
-    print("Launching server.py")
+    print("Launching server.py", flush=True)
 
     server = subprocess.Popen(
-        [sys.executable, "server.py"]
+        [sys.executable, "-u", "server.py"]
     )
 
     while True:
