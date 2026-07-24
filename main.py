@@ -12,7 +12,10 @@ from libraries.countdownLib import (
 from libraries.generalLib import trigger_system_beep
 from libraries.weatherLib import fetch_weather_probability
 
-spacexCountdownUrl = "https://content.spacex.com/api/spacex-website/launches-page-tiles/upcoming"
+def build_spacex_url():
+    return f"https://content.spacex.com/cms-assets/future_missions.json?{int(time.time())}"
+
+spacexCountdownUrl = build_spacex_url()
 flightID = "F343A80AAFA11416DBEA660C9ADB5728982363A1DB46756A4C4C86849048088B"
 fetchInterval = 0.5  # in seconds
 weatherFetchInterval = 600  # StageSep reassesses every 10 minutes
@@ -58,7 +61,7 @@ def fetch_clock_async():
     countdown_result_missing = False
 
     while running:
-        launch_details = getLaunchDetails(spacexCountdownUrl, flightID)
+        launch_details = getLaunchDetails(build_spacex_url(), flightID)
         new_real_ts = launch_details.get("launch_timestamp")
 
         if new_real_ts is not None:
@@ -80,7 +83,7 @@ def fetch_clock_async():
         else:
             if not countdown_result_missing:
                 print(
-                    f"SpaceX countdown result is null from {spacexCountdownUrl}",
+                    f"SpaceX countdown result is null from {build_spacex_url()}",
                     flush=True,
                 )
                 countdown_result_missing = True
@@ -513,7 +516,7 @@ def telemetry_update_loop():
     # Fetch the official T0 time once at startup
     global signed_seconds
     global launch_timestamp
-    launch_details = getLaunchDetails(spacexCountdownUrl, flightID)
+    launch_details = getLaunchDetails(build_spacex_url(), flightID)
     launch_timestamp = launch_details.get("launch_timestamp")
     if launch_timestamp is not None:
         signed_seconds = getSignedSeconds(launch_timestamp)

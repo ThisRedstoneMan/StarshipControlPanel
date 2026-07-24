@@ -86,8 +86,21 @@ def _parse_site_local_datetime(date_str, time_strn, launch_site):
     return local_dt.replace(tzinfo=launch_tz).timestamp()
 
 
+def _coerce_timestamp(value):
+    """Return a Unix timestamp from either a dict payload or a numeric value."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, dict):
+        seconds = value.get("Seconds")
+        if isinstance(seconds, (int, float)):
+            return int(seconds)
+    return None
+
+
 def getLaunchDetails(url, flightID):
-    """Fetch launch details including the launch window bounds from SpaceX's mission payload."""
+    """Fetch launch details from SpaceX's future_missions payload."""
     import requests
 
     try:
@@ -95,24 +108,39 @@ def getLaunchDetails(url, flightID):
         response.raise_for_status()
         data = response.json()
 
-        mission = next((m for m in data if m.get("correlationId") == flightID), None)
-        if mission is None:
-            raise ValueError(f"Flight ID {flightID} not found in the data.")
+        if isinstance(data, dict):
+            mission = data.get(flightID)
+            if mission is None:
+                raise ValueError(f"Flight ID {flightID} not found in the data.")
+        else:
+            mission = next((m for m in data if m.get("correlationId") == flightID), None)
+            if mission is None:
+                raise ValueError(f"Flight ID {flightID} not found in the data.")
 
-        override = mission.get("override") or {}
-        launch_date = override.get("windowOpenDate") or mission.get("launchDate")
-        launch_time = override.get("windowOpenTime") or mission.get("launchTime")
-        launch_timestamp = None
-        if launch_date and launch_time:
-            launch_timestamp = _parse_site_local_datetime(launch_date, launch_time, mission.get("launchSite"))
+        if isinstance(data, dict):
+            launch_timestamp = _coerce_timestamp(mission.get("TZeroLaunchDate"))
+            if launch_timestamp is None:
+                launch_timestamp = _coerce_timestamp(mission.get("PrimaryLaunchDate"))
 
-        window_start = _parse_site_local_datetime(override.get("windowOpenDate"), override.get("windowOpenTime"), mission.get("launchSite"))
-        window_end = _parse_site_local_datetime(override.get("windowCloseDate"), override.get("windowCloseTime"), mission.get("launchSite"))
+            window_open = mission.get("PrimaryLaunchWindow", {}).get("Open") if isinstance(mission.get("PrimaryLaunchWindow"), dict) else None
+            window_close = mission.get("PrimaryLaunchWindow", {}).get("Close") if isinstance(mission.get("PrimaryLaunchWindow"), dict) else None
+            window_start = _coerce_timestamp(window_open)
+            window_end = _coerce_timestamp(window_close)
+        else:
+            override = mission.get("override") or {}
+            launch_date = override.get("windowOpenDate") or mission.get("launchDate")
+            launch_time = override.get("windowOpenTime") or mission.get("launchTime")
+            launch_timestamp = None
+            if launch_date and launch_time:
+                launch_timestamp = _parse_site_local_datetime(launch_date, launch_time, mission.get("launchSite"))
 
-        if launch_timestamp is None and window_start is not None:
-            launch_timestamp = window_start
-        if launch_timestamp is None and window_end is not None:
-            launch_timestamp = window_end
+            window_start = _parse_site_local_datetime(override.get("windowOpenDate"), override.get("windowOpenTime"), mission.get("launchSite"))
+            window_end = _parse_site_local_datetime(override.get("windowCloseDate"), override.get("windowCloseTime"), mission.get("launchSite"))
+
+            if launch_timestamp is None and window_start is not None:
+                launch_timestamp = window_start
+            if launch_timestamp is None and window_end is not None:
+                launch_timestamp = window_end
 
         return {
             "launch_timestamp": launch_timestamp,
