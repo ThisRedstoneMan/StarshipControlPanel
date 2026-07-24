@@ -109,7 +109,7 @@ The app polls the configured SpaceX launch tiles endpoint, computes the signed c
 The main mission settings are defined near the top of [main.py](main.py):
 
 ```python
-spacexCountdownUrl = "https://content.spacex.com/api/spacex-website/launches-page-tiles/upcoming"
+spacexCountdownUrl = "https://content.spacex.com/cms-assets/future_missions.json"
 flightID = "F343A80AAFA11416DBEA660C9ADB5728982363A1DB46756A4C4C86849048088B"
 fetchInterval = 0.5
 updateInterval = 0.1
