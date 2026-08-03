@@ -1,6 +1,7 @@
 import time
 import json
 import threading
+from collections import deque
 from pathlib import Path
 from libraries.countdownLib import (
     getLaunchDetails,
@@ -16,8 +17,8 @@ def build_spacex_url():
     return f"https://content.spacex.com/cms-assets/future_missions.json?{int(time.time())}"
 
 spacexCountdownUrl = build_spacex_url()
-flightID = "F343A80AAFA11416DBEA660C9ADB5728982363A1DB46756A4C4C86849048088B"
-fetchInterval = 0.5  # in seconds
+flightID = "A4FD40788CD53F2F10DC480F6B73EDC91A399144F79598869160DCDCB2A1EF58"
+fetchInterval = 0.2  # in seconds
 weatherFetchInterval = 600  # StageSep reassesses every 10 minutes
 updateInterval = 0.1  # in seconds
 signed_seconds = 0
@@ -28,6 +29,50 @@ MANUAL_COUNTDOWN_PATH = Path("./data/manual_countdown_timestamp.txt")
 
 # How many past hold/delay events to keep for display (most recent first).
 MAX_EVENT_HISTORY = 10
+
+# ---------------------------------------------------------------------
+# Endpoint connection stats: how many times the SpaceX endpoint has been
+# reached successfully in a trailing window. Printed automatically every
+# NETWORK_STATS_PRINT_INTERVAL seconds, and on demand whenever the
+# launcher's console receives the "network" command (signalled via
+# NETWORK_STATS_SIGNAL_PATH, since launcher.py and this process are
+# separate).
+# ---------------------------------------------------------------------
+NETWORK_STATS_WINDOW_SECONDS = 60   # the "last minute" window - change here
+NETWORK_STATS_PRINT_INTERVAL = 60   # how often to auto-print the count
+NETWORK_STATS_SIGNAL_PATH = Path("./data/network_stats_request.flag")
+
+# Consecutive failed SpaceX endpoint connections (in a row) before the
+# UI switches from "using cached time" to a harder "disconnected" state.
+DISCONNECT_THRESHOLD = 10
+
+connection_success_times = deque()
+
+
+def _prune_connection_successes(now=None):
+    now = now if now is not None else time.time()
+    cutoff = now - NETWORK_STATS_WINDOW_SECONDS
+    while connection_success_times and connection_success_times[0] < cutoff:
+        connection_success_times.popleft()
+
+
+def record_connection_success():
+    now = time.time()
+    connection_success_times.append(now)
+    _prune_connection_successes(now)
+
+
+def count_recent_connection_successes():
+    _prune_connection_successes()
+    return len(connection_success_times)
+
+
+def print_network_stats():
+    print(
+        f"Endpoint connection successes in the last "
+        f"{NETWORK_STATS_WINDOW_SECONDS}s: {count_recent_connection_successes()}",
+        flush=True,
+    )
 
 # Debug override: when active, the displayed countdown is driven by
 # debug_override["launch_timestamp"] instead of the real SpaceX one.
@@ -59,9 +104,24 @@ def fetch_clock_async():
     next_weather_fetch = 0
     manual_countdown_timestamp = None
     countdown_result_missing = False
+    next_network_print = 0
+    consecutive_connection_failures = 0
 
     while running:
-        launch_details = getLaunchDetails(build_spacex_url(), flightID)
+        try:
+            launch_details = getLaunchDetails(build_spacex_url(), flightID)
+        except Exception as error:
+            # getLaunchDetails already catches request/parsing errors itself
+            # and returns {"ok": False, ...} instead of raising - this is
+            # just a last-resort safety net for anything unexpected.
+            launch_details = {"ok": False}
+            print(f"Connection to SpaceX endpoint failed: {error}", flush=True)
+
+        if launch_details.get("ok"):
+            record_connection_success()
+            consecutive_connection_failures = 0
+        else:
+            consecutive_connection_failures += 1
         new_real_ts = launch_details.get("launch_timestamp")
 
         if new_real_ts is not None:
@@ -77,7 +137,11 @@ def fetch_clock_async():
             # NOT in the middle of a debug simulation, so a test doesn't
             # get immediately overwritten/confused by a real poll.
             if not debug_override["active"]:
-                event = classify_timestamp_change(real_previous_ts, new_real_ts)
+                event = classify_timestamp_change(
+                    real_previous_ts,
+                    new_real_ts,
+                    is_paused=launch_details.get("tzero_paused"),
+                )
                 handle_timestamp_event(event)
             real_previous_ts = new_real_ts
         else:
@@ -103,6 +167,11 @@ def fetch_clock_async():
         if debug_override["active"]:
             effective_ts = debug_override["launch_timestamp"]
             current_state["countdown_source"] = "temporary"
+        elif consecutive_connection_failures >= DISCONNECT_THRESHOLD:
+            # 10+ failed connections in a row - stop calling it merely
+            # "cached" and be explicit that we've lost the endpoint.
+            effective_ts = manual_countdown_timestamp or real_previous_ts
+            current_state["countdown_source"] = "disconnected"
         else:
             effective_ts = (
                 new_real_ts
@@ -136,6 +205,17 @@ def fetch_clock_async():
             except (OSError, ValueError, json.JSONDecodeError) as error:
                 current_state["weather"]["error"] = str(error)
             next_weather_fetch = now + weatherFetchInterval
+
+        if now >= next_network_print:
+            print_network_stats()
+            next_network_print = now + NETWORK_STATS_PRINT_INTERVAL
+
+        if NETWORK_STATS_SIGNAL_PATH.exists():
+            print_network_stats()
+            try:
+                NETWORK_STATS_SIGNAL_PATH.unlink()
+            except FileNotFoundError:
+                pass
 
         time.sleep(fetchInterval)
 

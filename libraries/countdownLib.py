@@ -28,17 +28,23 @@ def format_duration(seconds):
     return f"{sign}{minutes:02d}:{secs:02d}"
 
 
-def classify_timestamp_change(previous_ts, new_ts, hold_threshold=600):
+def classify_timestamp_change(previous_ts, new_ts, hold_threshold=600, is_paused=None):
     """
     Classify a change in the target launch timestamp between two polls
     of the SpaceX countdown API.
 
     - previous_ts / new_ts: unix timestamps, or None if not known yet.
-    - hold_threshold: shifts of this many seconds or fewer are treated as
-      a "hold" (a short recycle within the same attempt, e.g. holding at
-      T-40s and resuming a few minutes later). Anything bigger is a
-      "delay" (pushed to a materially different time, e.g. scrubbed to
-      the next day).
+    - is_paused: the endpoint's own TZeroPaused flag (True/False), when
+      known. This is the authoritative signal - SpaceX says outright
+      whether the clock is holding - so it takes priority whenever it's
+      available: True -> "hold", False -> "delay", regardless of the
+      size of the shift.
+    - hold_threshold: fallback only, used when is_paused is None (e.g.
+      debug/simulated changes, which have no real TZeroPaused to read).
+      Shifts of this many seconds or fewer are treated as a "hold" (a
+      short recycle within the same attempt, e.g. holding at T-40s and
+      resuming a few minutes later). Anything bigger is a "delay" (pushed
+      to a materially different time, e.g. scrubbed to the next day).
 
     Returns None if nothing meaningfully changed, otherwise a dict:
         {
@@ -54,7 +60,10 @@ def classify_timestamp_change(previous_ts, new_ts, hold_threshold=600):
     if delta == 0:
         return None
 
-    kind = "hold" if abs(delta) <= hold_threshold else "delay"
+    if is_paused is not None:
+        kind = "hold" if is_paused else "delay"
+    else:
+        kind = "hold" if abs(delta) <= hold_threshold else "delay"
     return {
         "type": kind,
         "delta_seconds": delta,
@@ -126,6 +135,12 @@ def getLaunchDetails(url, flightID):
             window_close = mission.get("PrimaryLaunchWindow", {}).get("Close") if isinstance(mission.get("PrimaryLaunchWindow"), dict) else None
             window_start = _coerce_timestamp(window_open)
             window_end = _coerce_timestamp(window_close)
+
+            # SpaceX reports outright whether the T-0 clock is currently
+            # holding. When present, this is authoritative and should be
+            # trusted over inferring a hold from how big the shift looks.
+            raw_paused = mission.get("TZeroPaused")
+            tzero_paused = bool(raw_paused) if raw_paused is not None else None
         else:
             override = mission.get("override") or {}
             launch_date = override.get("windowOpenDate") or mission.get("launchDate")
@@ -142,21 +157,28 @@ def getLaunchDetails(url, flightID):
             if launch_timestamp is None and window_end is not None:
                 launch_timestamp = window_end
 
+            # The newer launches-page-tiles payload doesn't expose an
+            # equivalent paused flag - fall back to the magnitude
+            # heuristic in classify_timestamp_change for this shape.
+            tzero_paused = None
+
         return {
+            "ok": True,
             "launch_timestamp": launch_timestamp,
             "window_start": window_start,
             "window_end": window_end,
+            "tzero_paused": tzero_paused,
         }
 
     except requests.RequestException as e:
         print(f"Error fetching data from {url}: {e}")
-        return {"launch_timestamp": None, "window_start": None, "window_end": None}
+        return {"ok": False, "launch_timestamp": None, "window_start": None, "window_end": None, "tzero_paused": None}
     except ValueError as ve:
         print(ve)
-        return {"launch_timestamp": None, "window_start": None, "window_end": None}
+        return {"ok": False, "launch_timestamp": None, "window_start": None, "window_end": None, "tzero_paused": None}
     except Exception as e:
         print(f"Unexpected error parsing launch data: {e}")
-        return {"launch_timestamp": None, "window_start": None, "window_end": None}
+        return {"ok": False, "launch_timestamp": None, "window_start": None, "window_end": None, "tzero_paused": None}
 
 
 def getLaunchTimestamp(url, flightID):

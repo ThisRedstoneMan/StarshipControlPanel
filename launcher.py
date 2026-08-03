@@ -7,6 +7,7 @@ from pathlib import Path
 restart = threading.Event()
 shutdown = threading.Event()
 MANUAL_COUNTDOWN_PATH = Path("data/manual_countdown_timestamp.txt")
+NETWORK_STATS_SIGNAL_PATH = Path("data/network_stats_request.flag")
 
 def console_listener():
     while True:
@@ -24,12 +25,18 @@ def console_listener():
             else:
                 print("Shutdown cancelled", flush=True)
 
+        elif cmd.lower() == "network":
+            NETWORK_STATS_SIGNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+            NETWORK_STATS_SIGNAL_PATH.write_text("1", encoding="ascii")
+            print("Requested endpoint connection stats - check server output.", flush=True)
+
         else:
             try:
                 float(cmd)
             except ValueError:
                 print(
-                    "Enter a Unix timestamp, press Enter to restart, or type q to quit.",
+                    "Enter a Unix timestamp, press Enter to restart, "
+                    "type 'network' for endpoint connection stats, or type q to quit.",
                     flush=True,
                 )
             else:

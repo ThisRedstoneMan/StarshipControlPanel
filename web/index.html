@@ -38,6 +38,7 @@
     }
     .data-source.local { color: #d29922; }
     .data-source.waiting { color: #f85149; }
+    .data-source.disconnected { color: #f85149; }
     .clock { font-size: 3rem; font-weight: bold; letter-spacing: 2px; margin-bottom: 8px; }
     .phase { font-size: 1rem; color: #58a6ff; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 40px; }
     .last-milestone {
@@ -858,11 +859,13 @@
             temporary: "USING TEMPORARY MANUAL TIME",
             cached: "USING CACHED SPACEX TIME",
             waiting: "WAITING FOR SPACEX",
+            disconnected: "DISCONNECTED",
           };
           const source = state.countdown_source || "waiting";
           dataSource.textContent = sourceLabels[source] || "WAITING FOR SPACEX";
           dataSource.classList.toggle("local", source === "temporary" || source === "cached");
           dataSource.classList.toggle("waiting", source === "waiting");
+          dataSource.classList.toggle("disconnected", source === "disconnected");
           document.getElementById("clock").textContent = state.clock;
           document.getElementById("phase").textContent = state.phase;
           document.getElementById("error").textContent = "";
