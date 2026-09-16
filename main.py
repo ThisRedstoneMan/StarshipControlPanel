@@ -18,6 +18,9 @@ def build_spacex_url():
 
 spacexCountdownUrl = build_spacex_url()
 flightID = "A4FD40788CD53F2F10DC480F6B73EDC91A399144F79598869160DCDCB2A1EF58"
+FLIGHT_ID_REQUEST_PATH = Path("./data/flight_id_request.txt")
+FLIGHT_ID_RESPONSE_PATH = Path("./data/flight_id_response.txt")
+FLIGHT_ID_RESPONSE_POLL_INTERVAL = 0.1
 fetchInterval = 0.2  # in seconds
 weatherFetchInterval = 600  # StageSep reassesses every 10 minutes
 updateInterval = 0.1  # in seconds
@@ -98,14 +101,53 @@ HOLD_FUEL_BUDGET_SECONDS = 10 * 60  # 10 minutes
 hold_fuel_remaining = HOLD_FUEL_BUDGET_SECONDS
 
 
+def _request_new_flight_id(current_flight_id):
+    """Ask launcher.py to prompt the user for a replacement Flight ID."""
+    global flightID
+
+    FLIGHT_ID_REQUEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        FLIGHT_ID_RESPONSE_PATH.unlink()
+    except FileNotFoundError:
+        pass
+
+    FLIGHT_ID_REQUEST_PATH.write_text(current_flight_id, encoding="utf-8")
+    print(
+        f"Invalid Flight ID on first fetch: {current_flight_id}. "
+        "Waiting for a new Flight ID from the launcher...",
+        flush=True,
+    )
+
+    while running:
+        try:
+            new_flight_id = FLIGHT_ID_RESPONSE_PATH.read_text(encoding="utf-8").strip()
+        except (FileNotFoundError, OSError):
+            new_flight_id = ""
+
+        if new_flight_id:
+            try:
+                FLIGHT_ID_RESPONSE_PATH.unlink()
+            except FileNotFoundError:
+                pass
+            flightID = new_flight_id
+            print(f"Using new Flight ID: {flightID}", flush=True)
+            return flightID
+
+        time.sleep(FLIGHT_ID_RESPONSE_POLL_INTERVAL)
+
+    return flightID
+
+
 def fetch_clock_async():
-    global signed_seconds, launch_timestamp
+    global signed_seconds, launch_timestamp, flightID
     real_previous_ts = None
     next_weather_fetch = 0
     manual_countdown_timestamp = None
     countdown_result_missing = False
     next_network_print = 0
     consecutive_connection_failures = 0
+
+    first_fetch = True
 
     while running:
         try:
@@ -116,6 +158,14 @@ def fetch_clock_async():
             # just a last-resort safety net for anything unexpected.
             launch_details = {"ok": False}
             print(f"Connection to SpaceX endpoint failed: {error}", flush=True)
+
+        if first_fetch and launch_details.get("launch_timestamp") is None:
+            first_fetch = False
+            flightID = _request_new_flight_id(flightID)
+            # Retry immediately with the user-supplied Flight ID.
+            continue
+
+        first_fetch = False
 
         if launch_details.get("ok"):
             record_connection_success()
@@ -593,20 +643,11 @@ def telemetry_update_loop():
     """This function will run continuously on a background thread."""
     print("Background telemetry loop started...")
     
-    # Fetch the official T0 time once at startup
+    # fetch_clock_async owns the initial SpaceX fetch. If the configured
+    # Flight ID is invalid on that first fetch, it asks launcher.py to prompt
+    # the user for a replacement and retries before this loop needs a timestamp.
     global signed_seconds
     global launch_timestamp
-    launch_details = getLaunchDetails(build_spacex_url(), flightID)
-    launch_timestamp = launch_details.get("launch_timestamp")
-    if launch_timestamp is not None:
-        signed_seconds = getSignedSeconds(launch_timestamp)
-        current_state["launch_timestamp"] = launch_timestamp
-        current_state["launch_window"] = {
-            "start": launch_details.get("window_start"),
-            "end": launch_details.get("window_end"),
-        }
-    # If this first fetch fails, fetch_clock_async's own loop will pick
-    # up a good timestamp shortly and signed_seconds will start updating.
 
     while True:
         global active_hold, last_active_hold
