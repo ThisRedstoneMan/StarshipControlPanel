@@ -3,6 +3,8 @@ launch_site_timezones = {
     "Pad 2, Starbase": "America/Chicago",
     "SLC-40, Florida": "America/New_York",
     "LC-39A, Florida": "America/New_York",
+    "SLC-37B, Florida": "America/New_York",
+    "SLC-37A, Florida": "America/New_York",
     "SLC-4E, California": "America/Los_Angeles",
 }
 
@@ -221,3 +223,17 @@ def getSignedSeconds(launchTimeStamp):
     # Calculate signed seconds
     signed_seconds = int((current_time - launch_time).total_seconds())
     return signed_seconds
+
+def getAllFlightIDs(url):
+    """Generates all the currently available Flight IDs and mission names from SpaceX's launches-page-tiles endpoint."""
+    import requests
+    response = requests.get(url)
+    response.raise_for_status()
+
+    data = response.json()
+
+    return {
+        item["title"]: item["correlationId"]
+        for item in data
+        if item.get("title") and item.get("correlationId")
+    }

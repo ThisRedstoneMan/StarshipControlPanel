@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from libraries.generalLib import print_colored
 
 # Import our shared state and background thread runner
 from main import (
@@ -45,10 +46,10 @@ connected_clients: set[WebSocket] = set()
 # ---------------------------------------------------------------------
 DEBUG_PASSWORD = os.environ.get("STARSHIP_DEBUG_PASSWORD", "coolPassword")
 if DEBUG_PASSWORD == "coolPassword":
-    print(
-        "[debug-auth] WARNING: using the default debug password. "
-        "Set STARSHIP_DEBUG_PASSWORD to something private before sharing this on your LAN."
-    )
+    print_colored(
+        ""
+        "[debug-auth] WARNING: using the default debug password. Set STARSHIP_DEBUG_PASSWORD to something private before sharing this on your LAN."
+    , {'red': (0, 20)}, new_line=True)
 
 whitelisted_ips: set[str] = set()
 

@@ -4,6 +4,7 @@ import threading
 from collections import deque
 from pathlib import Path
 from libraries.countdownLib import (
+    getAllFlightIDs,
     getLaunchDetails,
     getLaunchTimestamp,
     getSignedSeconds,
@@ -16,6 +17,10 @@ from libraries.weatherLib import fetch_weather_probability
 def build_spacex_url():
     return f"https://content.spacex.com/cms-assets/future_missions.json?{int(time.time())}"
 
+def build_spacex_user_url():
+    return f"https://content.spacex.com/api/spacex-website/launches-page-tiles/upcoming?{int(time.time())}"
+
+spacexUserUrl = build_spacex_user_url()
 spacexCountdownUrl = build_spacex_url()
 flightID = "A4FD40788CD53F2F10DC480F6B73EDC91A399144F79598869160DCDCB2A1EF58"
 FLIGHT_ID_REQUEST_PATH = Path("./data/flight_id_request.txt")
@@ -100,7 +105,6 @@ HOLD_FUEL_BUDGET_SECONDS = 10 * 60  # 10 minutes
 
 hold_fuel_remaining = HOLD_FUEL_BUDGET_SECONDS
 
-
 def _request_new_flight_id(current_flight_id):
     """Ask launcher.py to prompt the user for a replacement Flight ID."""
     global flightID
@@ -115,6 +119,8 @@ def _request_new_flight_id(current_flight_id):
     print(
         f"Invalid Flight ID on first fetch: {current_flight_id}. "
         "Waiting for a new Flight ID from the launcher...",
+        "Here all available Flight IDs from the SpaceX API:",
+        getAllFlightIDs(spacexUserUrl),
         flush=True,
     )
 
@@ -313,16 +319,16 @@ current_state = {
         "updated_at": None,
         "error": None,
     },
-    "pad_clear": {"go": True},
-    "road_closure_close": {"go": True},
-    "road_closure_far": {"go": True},
-    "tank_farm_chilldown": {"go": True},
-    "go_for_prop_load": {"go": True},
-    "flight_director_go": {"go": True},
+    "pad_clear": {"go": False},
+    "road_closure_close": {"go": False},
+    "road_closure_far": {"go": False},
+    "tank_farm_chilldown": {"go": False},
+    "go_for_prop_load": {"go": False},
+    "flight_director_go": {"go": False},
     # Derived: green only when weather, pad_clear, and both road-closure
     # checks are all green. Tank farm chilldown and prop-load status are
     # tracked but do not gate Range.
-    "range": {"go": True},
+    "range": {"go": False},
 }
 
 
