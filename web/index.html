@@ -139,6 +139,62 @@
       border-style: dashed;
     }
 
+    /* ---- Delay popup: a more prominent, modal-style alert shown
+       specifically for "delay" events (on top of the regular banner),
+       for DELAY_POPUP_TIME seconds. Driven off the same absolute
+       detected_at timestamp as the banner, so a client that connects
+       or reconnects after the delay was detected still sees it for
+       whatever's left of that window instead of missing it entirely. */
+    .delay-popup {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 6, 8, 0.72);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .delay-popup.visible { display: flex; }
+    .delay-popup-box {
+      max-width: 420px;
+      width: calc(100% - 48px);
+      box-sizing: border-box;
+      padding: 24px;
+      border-radius: 10px;
+      background: #0a0d12;
+      border: 1px solid #f85149;
+      box-shadow: 0 0 32px rgba(248, 81, 73, 0.35);
+      text-align: center;
+    }
+    .delay-popup-title {
+      color: #f85149;
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .delay-popup-message {
+      color: #e6edf3;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+    .delay-popup-close {
+      background: transparent;
+      border: 1px solid #f85149;
+      color: #f85149;
+      font-family: inherit;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 8px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .delay-popup-close:hover {
+      background: rgba(248, 81, 73, 0.12);
+    }
+
     /* ---- Hold fuel bar ---- */
     .fuel-container {
       width: 100%;
@@ -355,6 +411,13 @@
   <div class="status offline" id="status">connecting...</div>
   <div class="data-source waiting" id="dataSource">WAITING FOR SPACEX</div>
   <div class="countdown-banner" id="countdownBanner"></div>
+  <div class="delay-popup" id="delayPopup">
+    <div class="delay-popup-box">
+      <div class="delay-popup-title">Launch Delay</div>
+      <div class="delay-popup-message" id="delayPopupMessage"></div>
+      <button class="delay-popup-close" id="delayPopupClose">Dismiss</button>
+    </div>
+  </div>
   <div class="clock" id="clock">T- 00:00:00</div>
   <div class="phase" id="phase">--</div>
   <div class="last-milestone" id="lastMilestone">Last milestone: —</div>
@@ -591,6 +654,52 @@
       el.classList.add("visible", status.type);
       if (status.simulated) el.classList.add("simulated");
     }
+
+    // How long (in seconds) to show the dedicated delay popup after a
+    // "delay" event was detected. Like the banner above, this is judged
+    // against the server's absolute detected_at timestamp rather than
+    // anything measured from page load - so a client that opens or
+    // reconnects the page after the delay already happened still gets
+    // the popup for whatever's left of this window, instead of missing
+    // it just because it wasn't connected at the moment of detection.
+    const DELAY_POPUP_TIME = 30 * 60;
+
+    // Tracks the detected_at of a delay the user has manually dismissed,
+    // so it doesn't immediately pop back up on the next state update
+    // (which arrives every ~0.5s) while still inside DELAY_POPUP_TIME.
+    let dismissedDelayDetectedAt = null;
+
+    function updateDelayPopup(status) {
+      const popup = document.getElementById("delayPopup");
+      if (!popup) return;
+      if (!status || status.type !== "delay" || !status.detected_at) {
+        popup.classList.remove("visible");
+        return;
+      }
+      if (status.detected_at === dismissedDelayDetectedAt) {
+        popup.classList.remove("visible");
+        return;
+      }
+      const ageSeconds = Date.now() / 1000 - status.detected_at;
+      if (ageSeconds > DELAY_POPUP_TIME) {
+        popup.classList.remove("visible");
+        return;
+      }
+      document.getElementById("delayPopupMessage").textContent = status.message;
+      popup.dataset.detectedAt = status.detected_at;
+      popup.classList.add("visible");
+    }
+
+    document.getElementById("delayPopupClose").addEventListener("click", () => {
+      const popup = document.getElementById("delayPopup");
+      const messageEl = document.getElementById("delayPopupMessage");
+      // Re-derive which event this was showing isn't straightforward from
+      // text alone, so instead just remember "dismissed until a newer
+      // delay comes in" by stashing the current banner status' timestamp
+      // via a data attribute set in updateDelayPopup.
+      dismissedDelayDetectedAt = popup.dataset.detectedAt ? Number(popup.dataset.detectedAt) : dismissedDelayDetectedAt;
+      popup.classList.remove("visible");
+    });
 
     function updateStatusBox(elId, label, go) {
       const box = document.getElementById(elId);
@@ -871,6 +980,7 @@
           document.getElementById("error").textContent = "";
           timeline.update(state);
           updateCountdownBanner(state.countdown_status);
+          updateDelayPopup(state.countdown_status);
           latestHoldFuel = state.hold_fuel;
           latestMilestones = Array.isArray(state.milestones)
             ? state.milestones

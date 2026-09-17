@@ -1,7 +1,10 @@
 import asyncio
+import datetime
 import hmac
 import json
 import os
+import re
+import sys
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -11,6 +14,79 @@ from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSock
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from libraries.generalLib import print_colored
+
+# ---------------------------------------------------------------------
+# Console logging: everything this process prints - plain print()
+# calls AND print_colored() calls (server.py's own debug-auth warning,
+# plus anything main.py's background telemetry thread prints, since it
+# all runs in-process) - is mirrored to a log file with a timestamp on
+# every line.
+#
+# print_colored() ultimately calls print() too, so it's caught by the
+# same stdout wrapper; the only extra thing done for it is stripping
+# the ANSI color escape codes it embeds, so the log file stays plain,
+# readable text while the console still shows it in color.
+#
+# The one thing deliberately left out of the file entirely is the
+# periodic "Endpoint connection successes in the last 60s: N" line from
+# main.py's print_network_stats() - it's still shown on the console,
+# it's just noisy to keep re-reading in a log.
+# ---------------------------------------------------------------------
+LOG = Path(__file__).parent / "server.log"
+
+_LOG_EXCLUDE_SNIPPET = "Endpoint connection successes in the last"
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+class _TimestampedLogTee:
+    """A stdout/stderr replacement that writes every line through
+    unchanged (so the console looks the same as before) while also
+    appending a timestamped copy of it to LOG, skipping any line that
+    contains _LOG_EXCLUDE_SNIPPET."""
+
+    def __init__(self, stream, log_path, exclude_snippet):
+        self._stream = stream
+        self._log_path = log_path
+        self._exclude_snippet = exclude_snippet
+        self._buffer = ""
+        self._lock = threading.Lock()
+
+    def write(self, message):
+        self._stream.write(message)
+        with self._lock:
+            self._buffer += message
+            while "\n" in self._buffer:
+                line, self._buffer = self._buffer.split("\n", 1)
+                self._log_line(line)
+        return len(message)
+
+    def _log_line(self, line):
+        # Strip ANSI color codes (e.g. from print_colored()) before
+        # deciding whether there's anything left to log, and before
+        # writing - the console keeps the colored version, the log
+        # file only ever gets plain text.
+        clean_line = _ANSI_ESCAPE_RE.sub("", line)
+        if not clean_line.strip():
+            return
+        if self._exclude_snippet in clean_line:
+            return
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            with open(self._log_path, "a", encoding="utf-8") as log_file:
+                log_file.write(f"[{timestamp}] {clean_line}\n")
+        except OSError:
+            # Never let a logging failure take down the server.
+            pass
+
+    def flush(self):
+        self._stream.flush()
+
+    def isatty(self):
+        return getattr(self._stream, "isatty", lambda: False)()
+
+
+sys.stdout = _TimestampedLogTee(sys.stdout, LOG, _LOG_EXCLUDE_SNIPPET)
+sys.stderr = _TimestampedLogTee(sys.stderr, LOG, _LOG_EXCLUDE_SNIPPET)
 
 # Import our shared state and background thread runner
 from main import (

@@ -16,41 +16,6 @@ NETWORK_STATS_SIGNAL_PATH = Path("data/network_stats_request.flag")
 FLIGHT_ID_REQUEST_PATH = Path("data/flight_id_request.txt")
 FLIGHT_ID_RESPONSE_PATH = Path("data/flight_id_response.txt")
 
-def print_colored(text, color_ranges, default_color='white'):
-    """
-    text: string to print
-    color_ranges: dict mapping color -> (start, end) range, or a list of ranges
-                  e.g. {'red': (0, 8), 'blue': (9, 15)}
-                  e.g. {'red': [(0, 8), (12, 15)]}  # multiple ranges, same color
-    default_color: color used for any letters not covered by a range
-    """
-    palette = {
-        'black': (0, 0, 0), 'red': (255, 0, 0), 'green': (0, 255, 0),
-        'yellow': (255, 255, 0), 'blue': (0, 0, 255), 'magenta': (255, 0, 255),
-        'cyan': (0, 255, 255), 'white': (255, 255, 255),
-    }
-
-    def to_rgb(color):
-        return palette[color] if isinstance(color, str) else color
-
-    # build a color for every index, starting with the default
-    colors = [default_color] * len(text)
-
-    for color, ranges in color_ranges.items():
-        # allow either a single (start, end) tuple or a list of them
-        if isinstance(ranges, tuple) and len(ranges) == 2 and isinstance(ranges[0], int):
-            ranges = [ranges]
-        for start, end in ranges:
-            for i in range(start, min(end, len(text))):
-                colors[i] = color
-
-    output = ""
-    for ch, color in zip(text, colors):
-        r, g, b = to_rgb(color)
-        output += f"\033[38;2;{r};{g};{b}m{ch}"
-    output += "\033[0m"
-    print(output)
-
 def _handle_flight_id_request():
     """Prompt for a replacement Flight ID requested by main.py."""
     if not FLIGHT_ID_REQUEST_PATH.exists():
