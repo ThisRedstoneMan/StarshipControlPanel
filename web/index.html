@@ -139,12 +139,7 @@
       border-style: dashed;
     }
 
-    /* ---- Delay popup: a more prominent, modal-style alert shown
-       specifically for "delay" events (on top of the regular banner),
-       for DELAY_POPUP_TIME seconds. Driven off the same absolute
-       detected_at timestamp as the banner, so a client that connects
-       or reconnects after the delay was detected still sees it for
-       whatever's left of that window instead of missing it entirely. */
+    /* ---- Delay popup ---- */
     .delay-popup {
       display: none;
       position: fixed;
@@ -239,7 +234,7 @@
     }
     .tl-scroll {
       width: 100%;
-      overflow-x: hidden; /* auto-centered by JS, not user-scrolled */
+      overflow-x: hidden;
       -webkit-overflow-scrolling: touch;
     }
     .tl-svg { display: block; }
@@ -381,6 +376,77 @@
     .debug-toggle label { cursor: pointer; }
     #debugTools { display: none; }
     #debugTools.visible { display: block; }
+
+    /* ---- Bottom-Left Credits Badge ---- */
+    .credits-container {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      z-index: 100;
+    }
+    .credits-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid #30363d;
+      background: #161b22;
+      color: #7d8590;
+      font-family: Georgia, serif;
+      font-style: italic;
+      font-size: 0.8rem;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s, background 0.2s;
+    }
+    .credits-container:hover .credits-icon,
+    .credits-container:focus-within .credits-icon {
+      color: #58a6ff;
+      border-color: #58a6ff;
+      background: #0d1117;
+    }
+    .credits-popup {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 0;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 8px 12px;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(4px);
+      transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+      pointer-events: none;
+    }
+    .credits-container:hover .credits-popup,
+    .credits-container:focus-within .credits-popup {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .credits-popup ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.72rem;
+      color: #e6edf3;
+    }
+    .credits-popup li {
+      margin: 2px 0;
+    }
+    .credits-popup a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    .credits-popup a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
@@ -509,17 +575,22 @@
     </details>
   </div>
 
+  <!-- Credits icon bottom-left -->
+  <div class="credits-container" tabindex="0" aria-label="Credits">
+    <div class="credits-icon">i</div>
+    <div class="credits-popup">
+      <ul>
+        <li>Weather model by <a href="https://stagesep.com" target="_blank" rel="noopener noreferrer">stagesep.com</a></li>
+      </ul>
+    </div>
+  </div>
+
   <script type="module">
     import { initTimeline } from "./timeline.js";
 
     const timeline = initTimeline(document.getElementById("timeline"));
 
     // ---- Debug tools visibility toggle ---------------------------------
-    // Clicking this checkbox no longer just reveals the panel — it first
-    // has to authenticate with the server. A correct password puts this
-    // device's IP on the server's in-RAM whitelist, which every /debug/*
-    // route now requires. Unchecking never needs a password; it just hides
-    // the panel (it does not remove the device from the whitelist).
     document.getElementById("showDebugTools").addEventListener("change", async (e) => {
       const checkbox = e.target;
       const debugToolsEl = document.getElementById("debugTools");
@@ -529,11 +600,10 @@
         return;
       }
 
-      // Don't reveal anything until the server confirms the password.
       checkbox.checked = false;
 
       const password = window.prompt("Enter the debug password:");
-      if (password === null) return; // user hit cancel
+      if (password === null) return;
 
       try {
         const response = await fetch("/debug/auth", {
@@ -586,23 +656,16 @@
       fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
 
       if (!pastLoadComplete) {
-        fill.style.backgroundColor = ""; // fall back to .inactive's grey
+        fill.style.backgroundColor = "";
       } else if (pct > 50) {
-        fill.style.backgroundColor = "#3fb950"; // green
+        fill.style.backgroundColor = "#3fb950";
       } else if (pct > 20) {
-        fill.style.backgroundColor = "#d29922"; // amber
+        fill.style.backgroundColor = "#d29922";
       } else {
-        fill.style.backgroundColor = "#f85149"; // red
+        fill.style.backgroundColor = "#f85149";
       }
     }
 
-    // Cache the latest hold_fuel numbers from the server, but drive the
-    // bar's "active/inactive" state and re-render off timeline.getEstimatedTime()
-    // every frame instead of the raw server t_seconds — that's the same
-    // time source the timeline's marker uses, so it already accounts for
-    // the manual debug slider / play controls. This means scrubbing the
-    // debug timeline actually shows how the fuel bar behaves at that point
-    // in the mission, without needing a real (or simulated) hold there.
     let latestHoldFuel = null;
     let latestMilestones = null;
 
@@ -634,8 +697,6 @@
       return `T${sign} ${hh}:${mm}:${ss}`;
     }
 
-    // How long to keep a hold/delay banner visible after it was detected,
-    // before it fades back to just being in countdown_events history.
     const BANNER_VISIBLE_SECONDS = 120;
 
     function updateCountdownBanner(status) {
@@ -655,18 +716,7 @@
       if (status.simulated) el.classList.add("simulated");
     }
 
-    // How long (in seconds) to show the dedicated delay popup after a
-    // "delay" event was detected. Like the banner above, this is judged
-    // against the server's absolute detected_at timestamp rather than
-    // anything measured from page load - so a client that opens or
-    // reconnects the page after the delay already happened still gets
-    // the popup for whatever's left of this window, instead of missing
-    // it just because it wasn't connected at the moment of detection.
     const DELAY_POPUP_TIME = 30 * 60;
-
-    // Tracks the detected_at of a delay the user has manually dismissed,
-    // so it doesn't immediately pop back up on the next state update
-    // (which arrives every ~0.5s) while still inside DELAY_POPUP_TIME.
     let dismissedDelayDetectedAt = null;
 
     function updateDelayPopup(status) {
@@ -692,11 +742,6 @@
 
     document.getElementById("delayPopupClose").addEventListener("click", () => {
       const popup = document.getElementById("delayPopup");
-      const messageEl = document.getElementById("delayPopupMessage");
-      // Re-derive which event this was showing isn't straightforward from
-      // text alone, so instead just remember "dismissed until a newer
-      // delay comes in" by stashing the current banner status' timestamp
-      // via a data attribute set in updateDelayPopup.
       dismissedDelayDetectedAt = popup.dataset.detectedAt ? Number(popup.dataset.detectedAt) : dismissedDelayDetectedAt;
       popup.classList.remove("visible");
     });
@@ -745,9 +790,7 @@
       const flightDirectorGo = (state.t_seconds != null && state.t_seconds >= -30)
         ? true
         : (!state.flight_director_go || state.flight_director_go.go !== false);
-      // Prefer the server's computed Range value if present, but fall back
-      // to computing it client-side so this still works against an older
-      // server that hasn't added "range" to current_state yet.
+
       const rangeGo = state.range ? state.range.go !== false : (weatherGo && padClearGo && roadClosureCloseGo && roadClosureFarGo);
 
       updateStatusBox("weatherBox", "WEATHER", weatherGo);
@@ -833,8 +876,6 @@
       dbgTimeLabel.textContent = formatT(t);
     }
 
-    // Once real milestone data has arrived, widen the slider to the
-    // mission's actual T- / T+ range instead of the placeholder bounds.
     function syncSliderBounds() {
       const bounds = timeline.getTimeBounds();
       if (bounds) {
@@ -861,10 +902,6 @@
       updateDbgLabel(Number(dbgSlider.value));
     });
 
-    // Commits the slider's current position to the server as a real T-0
-    // shift (resetting hold fuel to a clean 15:00), then hands control
-    // back to live data — so gradual hold / simulate buttons continue
-    // naturally from exactly where you jumped to.
     document.getElementById("dbgJumpServer").addEventListener("click", async () => {
       const signedSeconds = Number(dbgSlider.value);
       try {
@@ -873,7 +910,6 @@
         console.error("debug set-time failed", e);
         return;
       }
-      // The server now reflects the jump — go back to following it live.
       dbgEnable.checked = false;
       setControlsEnabled(false);
       timeline.clearDebugTime();
@@ -927,11 +963,9 @@
       }
     });
 
-    // While auto-playing, keep the slider + label in sync with the
-    // timeline's internally-advancing debug time.
     function syncPlaybackLoop() {
       if (!timeline.isDebugPlaying()) {
-        dbgPlay.textContent = "▶ Play"; // auto-stopped at mission end
+        dbgPlay.textContent = "▶ Play";
         return;
       }
       const t = timeline.getEstimatedTime();
